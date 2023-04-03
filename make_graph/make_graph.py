@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import sys
 import networkx as nx
 import pickle as pkl
 import multiprocessing
@@ -11,11 +12,9 @@ import cv2
 from .bwmorph import bwmorph
 from .visualize import visualize_graph
 
+sys.path.append('../config')
 
-im_ext = '.bmp'
-label_ext = '.bmp'
-len_y = 400
-len_x = 400
+from config import DATASET_CONFIGS
 
 
 def parse_args():
@@ -23,14 +22,16 @@ def parse_args():
     Parse input arguments
     """
     parser = argparse.ArgumentParser(description='Make a graph db')
-    parser.add_argument('--dataset_dir', default='dataset/GT_Artery',
+    parser.add_argument('--dataset', default='Artery',
                         help='Dataset dir to use', type=str)
-    parser.add_argument('--use_multiprocessing', default=False,
-                        help='Whether to use the python multiprocessing module', type=bool)
+    parser.add_argument('--use_multiprocessing',
+                        action="store_true",
+                        help='Whether to use the python multiprocessing module')
     parser.add_argument('--source_type', default='gt',
                         help='Source to be used: Can be result or gt', type=str)
-    parser.add_argument('--debug', default=False,
-                        help='show the travel time', type=bool)
+    parser.add_argument('--debug',
+                        action="store_true",
+                        help='show the travel time')
     parser.add_argument('--win_size', default=4,
                         help='Window size for srns', type=int) # for srns # [4,8,16]
     parser.add_argument('--edge_method', default='geo_dist',
@@ -42,47 +43,69 @@ def parse_args():
 
 
 def generate_graph_using_srns(args_tuple):
-    img_name, cnn_result_root_dir, params = args_tuple
-    win_size_str = '%.2d_%.2d'%(params.win_size,params.edge_dist_thresh)
+    img_name, graph_root_dir, params = args_tuple
+    win_size_str = '%.2d_%.2d'%(params.win_size, params.edge_dist_thresh)
 
-    if params.source_type == 'gt':
-        win_size_str = win_size_str + '_gt'
+    if params.source_type == 'gt': win_size_str = win_size_str + '_gt'
 
     cur_filename = os.path.basename(img_name)
-    print('processing ' + cur_filename)
-    cur_im_path = img_name + im_ext
-    cur_gt_mask_path = img_name + label_ext
+    print('Processing ' + cur_filename)
+    cur_image_path = img_name + DATASET_CONFIGS[params.dataset].image_suffix
+    cur_gt_path = img_name + DATASET_CONFIGS[params.dataset].label_suffix
 
     if params.source_type=='gt':
-        cur_res_prob_path = cur_gt_mask_path
+        cur_res_prob_path = cur_gt_path
     else:
-        cur_res_prob_path = os.path.join(cnn_result_root_dir, cur_filename + '_prob.png')
+        cur_res_prob_path = os.path.join(graph_root_dir, cur_filename + '_prob.png')
+    assert os.path.exists(cur_res_prob_path), f'{cur_res_prob_path} not exists!'
 
-    cur_vis_res_im_savepath = os.path.join(cnn_result_root_dir, cur_filename + '_' + win_size_str + '_vis_graph_res_on_im.png')
-    cur_vis_res_mask_savepath = os.path.join(cnn_result_root_dir, cur_filename + '_' + win_size_str + '_vis_graph_res_on_mask.png')
-    cur_res_graph_savepath = os.path.join(cnn_result_root_dir, cur_filename+'_' + win_size_str + '.graph_res')
+    cur_vis_res_im_savepath = os.path.join(graph_root_dir,
+                                           cur_filename + '_' + win_size_str + '_vis_graph_res_on_im.png')
+    cur_vis_res_mask_savepath = os.path.join(graph_root_dir,
+                                             cur_filename + '_' + win_size_str + '_vis_graph_res_on_mask.png')
+    cur_res_graph_savepath = os.path.join(graph_root_dir,
+                                          cur_filename+'_' + win_size_str + '.graph_res')
 
-    im = cv2.imread(cur_im_path)
-    gt_mask = cv2.imread(cur_gt_mask_path, 0)
-    gt_mask = gt_mask.astype(float) / 255
-    gt_mask = gt_mask >= 0.5
+    H = DATASET_CONFIGS[params.dataset].len_y
+    W = DATASET_CONFIGS[params.dataset].len_x
+    cur_image = np.zeros((H, W, 3), dtype='uint8')
+    cur_gt = np.zeros((H, W), dtype='uint8')
+    cur_vessel = np.zeros((H, W), dtype='uint8')
+
+    if os.path.exists(cur_image_path):
+        image = cv2.imread(cur_image_path)
+        height, width = image.shape[:2]
+        assert H >= height
+        assert W >= width
+        cur_image[:height, :width] = image
+    if os.path.exists(cur_gt_path):
+        gt_mask = cv2.imread(cur_gt_path, 0)
+        height, width = gt_mask.shape[:2]
+        assert H >= height
+        assert W >= width
+        cur_gt[:height, :width] = gt_mask
+
+    cur_gt = cur_gt.astype(float) / 255
+    cur_gt = cur_gt >= 0.5
 
     vesselness = cv2.imread(cur_res_prob_path, 0)
-    vesselness = vesselness.astype(float) / 255
+    height, width = vesselness.shape[:2]
+    assert H >= height
+    assert W >= width
+    cur_vessel[:height, :width] = vesselness
+    cur_vessel = cur_vessel.astype(float) / 255
 
     # find local maxima
-    im_y = im.shape[0]
-    im_x = im.shape[1]
-    y_quan = range(0, im_y, params.win_size)
-    y_quan = sorted(list(set(y_quan) | set([im_y])))
-    x_quan = range(0, im_x, params.win_size)
-    x_quan = sorted(list(set(x_quan) | set([im_x])))
+    y_quan = range(0, height, params.win_size)
+    y_quan = sorted(list(set(y_quan) | set([height])))
+    x_quan = range(0, width, params.win_size)
+    x_quan = sorted(list(set(x_quan) | set([width])))
 
     max_val = []
     max_pos = []
     for y_idx in range(len(y_quan)-1):
         for x_idx in range(len(x_quan)-1):
-            cur_patch = vesselness[y_quan[y_idx]:y_quan[y_idx+1], x_quan[x_idx]:x_quan[x_idx+1]]
+            cur_patch = cur_vessel[y_quan[y_idx]:y_quan[y_idx+1], x_quan[x_idx]:x_quan[x_idx+1]]
             if np.sum(cur_patch)==0:
                 max_val.append(0)
                 max_pos.append((y_quan[y_idx]+cur_patch.shape[0]/2, x_quan[x_idx]+cur_patch.shape[1]/2))
@@ -97,8 +120,8 @@ def generate_graph_using_srns(args_tuple):
         graph.add_node(node_idx, kind='MP', y=node_y, x=node_x, label=node_idx)
         print('node label', node_idx, 'pos', (node_y, node_x), 'added')
 
-    speed = vesselness
-    if params.source_type=='gt':
+    speed = cur_vessel
+    if params.source_type == 'gt':
         speed = bwmorph(speed, 'dilate', n_iter=1)
         speed = speed.astype(float)
 
@@ -109,7 +132,7 @@ def generate_graph_using_srns(args_tuple):
         x_i = int(graph.node[n]['x'])
         y_i = int(graph.node[n]['y'])
         if speed[y_i, x_i] == 0: continue
-        neighbor = speed[max(0,y_i-1):min(im_y,y_i+2), max(0,x_i-1):min(im_x,x_i+2)]
+        neighbor = speed[max(0,y_i-1):min(height, y_i+2), max(0,x_i-1):min(width, x_i+2)]
         if np.mean(neighbor) < 0.1: continue
         if params.edge_method == 'geo_dist':
             phi = np.ones_like(speed)
@@ -141,29 +164,32 @@ def generate_graph_using_srns(args_tuple):
             raise NotImplementedError
 
     # visualize the constructed graph
-    visualize_graph(im, graph, show_graph=True,
-                    save_graph=True,
-                    num_nodes_each_type=[0, graph.number_of_nodes()],
-                    save_path=cur_vis_res_im_savepath)
-    visualize_graph(gt_mask, graph, show_graph=False,
-                    save_graph=True,
-                    num_nodes_each_type=[0, graph.number_of_nodes()],
-                    save_path=cur_vis_res_mask_savepath)
+    if os.path.exists(cur_image_path):
+        visualize_graph(image, graph, show_graph=False,
+                        save_graph=True,
+                        num_nodes_each_type=[0, graph.number_of_nodes()],
+                        save_path=cur_vis_res_im_savepath)
+    if os.path.exists(cur_gt_path):
+        visualize_graph(gt_mask, graph, show_graph=False,
+                        save_graph=True,
+                        num_nodes_each_type=[0, graph.number_of_nodes()],
+                        save_path=cur_vis_res_mask_savepath)
     # save as files
     nx.write_gpickle(graph, cur_res_graph_savepath, protocol=pkl.HIGHEST_PROTOCOL)
     graph.clear()
 
 
 def make_graph(args):
-    assert os.path.exists(args.dataset_dir)
-    train_set_txt_path = os.path.join(args.dataset_dir, 'train.txt')
-    test_set_txt_path = os.path.join(args.dataset_dir, 'test.txt')
-    cnn_result_root_dir = os.path.join(args.dataset_dir, 'graph_cnn')
+    assert args.dataset in DATASET_CONFIGS
+    assert os.path.exists(os.path.join('datasets', args.dataset))
+    train_set_txt_path = os.path.join('datasets', args.dataset, 'train.txt')
+    test_set_txt_path = os.path.join('datasets', args.dataset, 'test.txt')
+    graph_root_dir = os.path.join('datasets', args.dataset, 'graph')
 
     if args.source_type != 'gt':
-        assert os.path.exists(cnn_result_root_dir)
+        assert os.path.exists(graph_root_dir)
     else:
-        if not os.path.exists(cnn_result_root_dir): os.mkdir(cnn_result_root_dir)
+        if not os.path.exists(graph_root_dir): os.mkdir(graph_root_dir)
 
     with open(train_set_txt_path) as f:
         train_image_paths = [x.strip() for x in f.readlines()]
@@ -173,8 +199,8 @@ def make_graph(args):
     len_train = len(train_image_paths)
     len_test = len(test_image_paths)
 
-    func_arg_train = map(lambda x: (train_image_paths[x], cnn_result_root_dir, args), range(len_train))
-    func_arg_test = map(lambda x: (test_image_paths[x], cnn_result_root_dir, args), range(len_test))
+    func_arg_train = map(lambda x: (train_image_paths[x], graph_root_dir, args), range(len_train))
+    func_arg_test = map(lambda x: (test_image_paths[x], graph_root_dir, args), range(len_test))
 
     if args.use_multiprocessing:
         pool = multiprocessing.Pool(processes=16)
