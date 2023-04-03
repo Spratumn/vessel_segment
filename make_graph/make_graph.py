@@ -73,7 +73,7 @@ def generate_graph_using_srns(args_tuple):
     cur_vessel = np.zeros((H, W), dtype='uint8')
 
     if os.path.exists(cur_image_path):
-        image = cv2.imread(cur_image_path)
+        image = cv2.cvtColor(cv2.imread(cur_image_path), cv2.COLOR_BGR2RGB)
         height, width = image.shape[:2]
         assert H >= height
         assert W >= width
