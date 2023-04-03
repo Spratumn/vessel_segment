@@ -2,6 +2,7 @@
 
 ```sh
 conda create -n vgn python=3.6
+conda activate vgn
 pip install -r requirements.txt
 ```
 
