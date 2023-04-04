@@ -18,4 +18,7 @@ pip install -r requirements.txt
 ```sh
 python -m make_graph.make_graph --dataset CHASE_DB1 --win_size 8 --source_type gt --use_multiprocessing
 
+# or
+
+python -m make_graph.make_graph --dataset Artery --win_size 8 --source_type gt --use_multiprocessing
 ```

@@ -11,5 +11,5 @@ DatasetConfig = namedtuple('DatasetConfig', [
 
 DATASET_CONFIGS = {
     'CHASE_DB1': DatasetConfig('.jpg', '_1stHO.png', 1024, 1024),
-    'Artery': DatasetConfig('.jpg', '.bmp', 400, 400),
+    'Artery': DatasetConfig('.bmp', '_label.bmp', 400, 400),
 }
