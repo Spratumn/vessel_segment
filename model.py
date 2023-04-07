@@ -1,3 +1,5 @@
+import torch
+
 import config as cfg
 from module import DRIU, LargeDRIU
 
@@ -19,5 +21,8 @@ class VesselSegmCNN():
 
     def build_driu_large(self):
         self.cnn_model = LargeDRIU()
+
+    def load_model(self, modelpath):
+        self.cnn_model = torch.loa
 
 
