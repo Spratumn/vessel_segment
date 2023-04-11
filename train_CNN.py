@@ -15,25 +15,21 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Train a vessel_segm_cnn network')
     parser.add_argument('--dataset', default='HRF', help='Dataset to use: Can be DRIVE or STARE or CHASE_DB1 or HRF', type=str)
     parser.add_argument('--cnn_model', default='driu', help='CNN model to use', type=str)
-    parser.add_argument('--use_fov_mask', default=False, help='Whether to use fov masks', type=bool)
-    parser.add_argument('--use_padding', default=True, help='Whether to use fov masks', type=bool)
     parser.add_argument('--lr', default=1e-02, help='Learning rate to use: Can be any floating point number', type=float)
     parser.add_argument('--max_iters', default=50000, help='Maximum number of iterations', type=int)
-    parser.add_argument('--pretrained_model', default=None, help='path for a pretrained model(.pth)', type=str)
+    parser.add_argument('--pretrained_model', default='pretrained_model/VGG_imagenet.npy', help='path for a pretrained model(.pth)', type=str)
     parser.add_argument('--save_root', default='log', help='root path to save trained models and test results', type=str)
-
     args = parser.parse_args()
     return args
 
 
 
-if __name__ == '__main__':
-    args = parse_args()
 
+def run_train(args):
     print('Called with args:')
     print(args)
 
-    data_layer_train = util.DataLayer(args.dataset, is_training=True, use_padding=args.use_padding)
+    data_layer_train = util.DataLayer(args.dataset, is_training=True)
     data_layer_test = util.DataLayer(args.dataset, is_training=False)
 
     log_dir = os.path.join(args.save_root, args.dataset)
@@ -47,8 +43,8 @@ if __name__ == '__main__':
     network = VesselSegmCNN(args)
 
     if args.pretrained_model is not None:
-        print("Loading model...")
-        network.load_model(args.pretrained_model, ignore_missing=True)
+        print("Loading pretrained model...")
+        network.load_npy(args.pretrained_model)
 
     f_log = open(os.path.join(log_dir,'log.txt'), 'w')
     last_snapshot_iter = -1
@@ -61,10 +57,7 @@ if __name__ == '__main__':
         timer.tic()
         # get one batch
         _, blobs_train = data_layer_train.forward()
-        if args.use_fov_mask:
-            fov_masks = blobs_train['fov']
-        else:
-            fov_masks = np.ones(blobs_train['label'].shape, dtype=blobs_train['label'].dtype)
+        fov_masks = np.ones(blobs_train['label'].shape, dtype=blobs_train['label'].dtype)
 
         loss_val, accuracy_val, pre_val, rec_val, _ = network.run_batch(blobs_train['img'], blobs_train['label'], fov_masks)
         timer.toc()
@@ -91,10 +84,7 @@ if __name__ == '__main__':
 
                 imgs = blobs_test['img']
                 labels = blobs_test['label']
-                if args.use_fov_mask:
-                    fov_masks = blobs_test['fov']
-                else:
-                    fov_masks = np.ones(labels.shape, dtype=labels.dtype)
+                fov_masks = np.ones(labels.shape, dtype=labels.dtype)
                 loss_val, *_, fg_prob_map = network.run_batch(imgs, labels, fov_masks, False)
 
                 test_loss_list.append(loss_val.item())
@@ -133,9 +123,9 @@ if __name__ == '__main__':
             f_log.write('train_loss ' + str(np.mean(train_loss_list)) + '\n')
             f_log.write('iter: ' + str(iter+1) + ' / '+ str(args.max_iters) + '\n')
             f_log.write('test_loss ' + str(np.mean(test_loss_list)) + '\n')
-            f_log.write('test_acc ' + str(acc_test)+'\n')
-            f_log.write('test_auc ' + str(auc_test)+'\n')
-            f_log.write('test_ap ' + str(ap_test)+'\n')
+            f_log.write('test_acc ' + str(acc_test) + '\n')
+            f_log.write('test_auc ' + str(auc_test) + '\n')
+            f_log.write('test_ap ' + str(ap_test) + '\n')
             f_log.flush()
 
             train_loss_list = []
@@ -148,3 +138,10 @@ if __name__ == '__main__':
 
     f_log.close()
     print("Training complete.")
+
+if __name__ == '__main__':
+    args = parse_args()
+    run_train(args)
+
+
+

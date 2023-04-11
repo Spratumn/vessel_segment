@@ -2,6 +2,9 @@ import torch
 import torch.nn as nn
 import torch.optim as opt
 import numpy as np
+import copy
+
+
 import config as cfg
 from module import DRIU, LargeDRIU
 
@@ -21,7 +24,8 @@ class VesselSegmCNN():
         print(f"Model built on {self.device}.")
         opt_params = {
             'params': filter(lambda p: p.requires_grad, self.cnn_model.parameters()),
-            'lr': params.lr
+            'lr': params.lr,
+            'weight_decay': cfg.WEIGHT_DECAY_RATE
             }
         self.optimizer = opt.Adam(**opt_params)
         self.loss_function = nn.BCEWithLogitsLoss(reduce=False)
@@ -35,6 +39,26 @@ class VesselSegmCNN():
     def load_model(self, modelpath):
         self.cnn_model.load_state_dict(torch.load(modelpath))
 
+    def load_npy(self, data_path):
+        data_dict = np.load(data_path, allow_pickle=True, encoding='latin1').item()
+        state_dict = copy.deepcopy(self.cnn_model.state_dict())
+        assgned_keys = []
+        for key in state_dict:
+            layer_name = key.split('.')[0]
+            if layer_name in data_dict:
+                if layer_name in assgned_keys: continue
+                weight = data_dict[layer_name]['weights']
+                bias = data_dict[layer_name]['biases']
+                weight_key = f'{layer_name}.0.weight'
+                bias_key = f'{layer_name}.0.bias'
+                weight = np.transpose(weight, (3, 2, 0, 1))
+                state_dict[weight_key] = torch.from_numpy(weight).to(self.device)
+                state_dict[bias_key] = torch.from_numpy(bias).to(self.device)
+                print("assign pretrain model " + layer_name + "_weights to " + weight_key)
+                print("assign pretrain model " + layer_name + "_biases to " + bias_key)
+                assgned_keys.append(layer_name)
+        self.cnn_model.load_state_dict(state_dict)
+
     def save_model(self, modelpath):
         torch.save(self.cnn_model.state_dict(), modelpath)
 
@@ -47,34 +71,36 @@ class VesselSegmCNN():
     def run_batch(self, imgs, labels, fov_masks, is_train=True):
         if is_train:
             self.optimizer.zero_grad(set_to_none=True)
-        output = self.forward(imgs, is_train)
-        labels = torch.from_numpy(labels).to(self.device)
-        fov_masks = torch.from_numpy(fov_masks).to(self.device)
+        output = self.forward(imgs, is_train).permute([0, 2, 3, 1])
+        labels = torch.from_numpy(labels).to(self.device).long()
+        fov_masks = torch.from_numpy(fov_masks).to(self.device).long()
         fg_prob = torch.sigmoid(output)
 
         ### Compute the loss ###
-        mask_fg = torch.ones_like(labels)
-        binary_mask_fg = torch.eq(labels, mask_fg).float()
-        binary_mask_bg = torch.ne(labels, mask_fg).float()
-        combined_mask = torch.cat([binary_mask_bg, binary_mask_fg], dim=3)
+        binary_mask_fg = labels == 1
+        binary_mask_bg = labels != 1
+        combined_mask = torch.cat([binary_mask_bg, binary_mask_fg], dim=3).float()
         flat_one_hot_labels = combined_mask.view(-1, 2)
 
         flat_labels = labels.view(-1,).float()
         flat_logits = output.view(-1,)
         cross_entropies = self.loss_function(flat_logits, flat_labels)
+
         # weighted cross entropy loss (in fov)
         num_pixel = torch.sum(fov_masks)
         num_pixel_fg = torch.count_nonzero(binary_mask_fg)
-
         num_pixel_bg = num_pixel - num_pixel_fg
-        class_weight = torch.cat([torch.reshape(torch.divide(num_pixel_fg,num_pixel), (1, 1)),
-                                  torch.reshape(torch.divide(num_pixel_bg,num_pixel), (1, 1))], axis=1).float()
-        weight_per_label = torch.transpose(torch.matmul(flat_one_hot_labels, torch.transpose(class_weight, 0, 1)), 0, 1) #shape [1, TRAIN.BATCH_SIZE]
+
+        class_weight = torch.cat([torch.reshape(num_pixel_fg / num_pixel, (1, 1)),
+                                  torch.reshape(num_pixel_bg / num_pixel, (1, 1))], axis=1).float()
+        weight_per_label = torch.matmul(flat_one_hot_labels, class_weight.permute([1, 0])).permute([1, 0]) #shape [1, TRAIN.BATCH_SIZE]
 
         # this is the weight for each datapoint, depending on its label
         reshaped_fov_masks = fov_masks.view(-1,).float()
         reshaped_fov_masks /= torch.mean(reshaped_fov_masks)
-        loss = torch.mean(torch.multiply(torch.multiply(reshaped_fov_masks, weight_per_label), cross_entropies))
+
+        loss = torch.mean(torch.mul(torch.mul(reshaped_fov_masks, weight_per_label), cross_entropies))
+
         if is_train:
             loss.backward()
             self.optimizer.step()
@@ -89,8 +115,6 @@ class VesselSegmCNN():
         tp = torch.sum(torch.logical_and(flat_labels.bool(), flat_bin_output).float())
         precision = torch.divide(tp, torch.add(num_fg_output, cfg.EPSILON))
         recall = torch.divide(tp, num_pixel_fg.float())
-        fg_prob_map = fg_prob.detach().cpu().numpy()
-
-        return loss, accuracy, precision, recall, np.transpose(fg_prob_map, (0, 2, 3, 1))
+        return loss, accuracy, precision, recall, fg_prob.detach().cpu().numpy()
 
 

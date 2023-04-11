@@ -107,46 +107,27 @@ class LargeDRIU(nn.Module):
 
 
 
-def new_conv_layer(in_channel, out_channel, ksize=3, stride=1, padding=1, norm_type=None, use_relu=False):
-    bias = False
-    if norm_type == 'BN':
-        norm = nn.BatchNorm2d(out_channel)
-    elif norm_type == 'GN':
-        group_num = min(GN_MIN_NUM_G, int(out_channel / GN_MIN_CHS_PER_G))
-        norm = nn.GroupNorm(group_num, out_channel)
-    else:
-        bias = True
+def new_conv_layer(in_channel, out_channel, ksize=3, stride=1, padding=1, use_relu=False):
+    norm = nn.BatchNorm2d(out_channel)
     conv = nn.Conv2d(in_channel,
                      out_channel,
                      kernel_size=ksize,
                      stride=stride,
                      padding=padding,
-                     bias=bias)
-    layers = [conv]
-    if not bias: layers.append(norm)
+                     bias=True)
+    layers = [conv, norm]
+    layers.append(norm)
     if use_relu: layers.append(nn.ReLU(inplace=True))
     return nn.Sequential(*layers)
 
 
-def new_fc_layer(in_channel, out_channel, ksize=3, stride=1, padding=1,
-                 norm_type=None, use_relu=False, is_training=True):
-    pass
-
-
 def new_deconv_layer(in_channel, out_channel, ksize=3, stride=1, padding=1,
-                     norm_type=None, use_relu=False):
-    bias = False
-    if norm_type == 'BN':
-        norm = nn.BatchNorm2d(out_channel)
-    elif norm_type == 'GN':
-        group_num = min(GN_MIN_NUM_G, int(out_channel / GN_MIN_CHS_PER_G))
-        norm = nn.GroupNorm(group_num, out_channel)
-    else:
-        bias = True
+                     use_relu=False):
+    norm = nn.BatchNorm2d(out_channel)
     dconv = nn.ConvTranspose2d(in_channel, out_channel,
                                kernel_size=ksize, stride=stride,
-                               padding=padding, bias=bias)
-    layers = [dconv]
-    if not bias: layers.append(norm)
+                               padding=padding, bias=True)
+    layers = [dconv, norm]
+    layers.append(norm)
     if use_relu: layers.append(nn.ReLU(inplace=True))
     return nn.Sequential(*layers)

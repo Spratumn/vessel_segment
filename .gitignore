@@ -1,3 +1,4 @@
 datasets
 log
 *.pyc
+pretrained_model
