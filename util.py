@@ -205,7 +205,7 @@ def _get_image_fov_blob(imagepathes, dataset, is_training, use_padding=False):
     processed_fovs = []
 
     for i in range(num_images):
-        im = cv2.imread(imagepathes[i] + dataset_config.image_suffix)
+        im = cv2.cvtColor(cv2.imread(imagepathes[i] + dataset_config.image_suffix), cv2.COLOR_BGR2RGB)
         label = cv2.imread(imagepathes[i] + dataset_config.label_suffix, 0)
         label = label.reshape((label.shape[0],label.shape[1],1))
         # fov = cv2.imread(imagepathes[i] + dataset_config.mask_suffix, 0)
@@ -275,9 +275,7 @@ def _get_graph_fov_blob(imagepathes, dataset, is_training, edge_type='srns_geo_d
     for i in range(num_graphs):
 
         # load images
-
-
-        im = cv2.imread(imagepathes[i] + dataset_config.image_suffix)
+        im = cv2.cvtColor(cv2.imread(imagepathes[i] + dataset_config.image_suffix), cv2.COLOR_BGR2RGB)
         label = cv2.imread(imagepathes[i] + dataset_config.label_suffix, 0)
         label = label.reshape((label.shape[0],label.shape[1],1))
         fov = cv2.imread(imagepathes[i] + dataset_config.mask_suffix, 0)

@@ -33,7 +33,7 @@ TEST_ITERS = 500
 SNAPSHOT_ITERS = 500
 WEIGHT_DECAY_RATE = 0.0005
 MOMENTUM = 0.9
-BATCH_SIZE = 2 # for CNN
+BATCH_SIZE = 1 # for CNN
 GRAPH_BATCH_SIZE = 1 # for VGN
 
 ##### Training (augmentation) #####
