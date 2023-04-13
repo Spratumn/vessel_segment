@@ -6,7 +6,7 @@ import copy
 
 
 import config as cfg
-from module import DRIU, LargeDRIU
+from .module import DRIU, LargeDRIU
 
 
 

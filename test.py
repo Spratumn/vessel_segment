@@ -1,39 +1,63 @@
-from model import VesselSegmCNN
 import argparse
-import torch
-import util
 import cv2
+import os
+import matplotlib.pyplot as plt
+
 
 def parse_args():
     """
     Parse input arguments
     """
-    parser = argparse.ArgumentParser(description='Train a vessel_segm_cnn network')
-    parser.add_argument('--dataset', default='CHASE_DB1', help='Dataset to use: Can be CHASE_DB1 or HRF', type=str)
-    parser.add_argument('--cnn_model', default='driu', help='CNN model to use', type=str)
+    parser = argparse.ArgumentParser(description='test')
+    parser.add_argument('--dataset', default='Artery', help='Dataset to use: Can be Artery or HRF', type=str)
 
     return parser.parse_args()
 
+
+def draw_cnn_results(args):
+    result_dir = f'log/{args.dataset}'
+    log_path = os.path.join(result_dir, 'log.txt')
+    with open(log_path, 'r') as f:
+        lines = f.readlines()
+    logs = [l.rstrip('\n') for l in lines]
+    iter_idxes = []
+    train_losses = []
+    test_losses = []
+    test_accs = []
+    test_aucs = []
+    test_aps = []
+    for i in range(0, len(logs), 7):
+        iter_idxes.append(int(logs[i].split(' ')[1]))
+        train_losses.append(float(logs[i+1].split(' ')[1]))
+        test_losses.append(float(logs[i+3].split(' ')[1]))
+        test_accs.append(float(logs[i+4].split(' ')[1]))
+        test_aucs.append(float(logs[i+5].split(' ')[1]))
+        test_aps.append(float(logs[i+6].split(' ')[1]))
+
+    plt.plot(iter_idxes, train_losses, c='blue', label='train')
+    plt.plot(iter_idxes, test_losses, c='green', label='test')
+    plt.legend()
+    plt.xlabel('iters')
+    plt.ylabel('loss')
+    plt.savefig(os.path.join(result_dir, 'loss.png'))
+    plt.close()
+
+    plt.plot(iter_idxes, test_accs, c='blue', label='acc')
+    plt.plot(iter_idxes, test_aucs, c='green', label='auc')
+    plt.plot(iter_idxes, test_aps, c='red', label='ap')
+    plt.legend()
+    plt.xlabel('iters')
+    plt.ylabel('performance')
+    plt.savefig(os.path.join(result_dir, 'performance.png'))
+    plt.close()
+
+
 if __name__ == '__main__':
     args = parse_args()
-    print(args)
+    draw_cnn_results(args)
 
 
-    # network = VesselSegmCNN(args)
-    # # print(network.cnn_model)
-    # x = torch.rand((1, 3, 768, 768))
-    # print(x.size())
-    # print(network.cnn_model(x).size())
 
 
-    import numpy as np
-    import matplotlib.pyplot as plt
-    data_layer_train = util.DataLayer(args.dataset, is_training=True, use_padding=True)
-    img_list, blobs = data_layer_train.forward()
-    print(img_list)
-    print(blobs['img'].shape)
-    image = blobs['img'][0]
-    image = np.transpose(image, axes=[1, 2, 0])
-    print(image[0])
-    plt.imshow(image)
-    plt.show()
+
+

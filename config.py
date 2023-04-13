@@ -7,14 +7,19 @@ DatasetConfig = namedtuple('DatasetConfig', [
     'mask_suffix',
     'len_y',
     'len_x',
-    'pixel_mean'
+    'pixel_mean',
+    'gt_values'
 ])
 
+Artery_vessel_values = {
+    'blue': (29, 150),
+    'red': (76, 150),
+}
 
 DATASET_CONFIGS = {
-    'CHASE_DB1': DatasetConfig('.jpg', '_1stHO.png', '', 1024, 1024, [113.953, 39.807, 6.880]),
-    'Artery': DatasetConfig('.bmp', '.tif', '', 400, 400, [127, 127, 127]),
-    'HRF': DatasetConfig('.bmp', '.tif', '', 768, 768, [164.420, 51.826, 27.130])
+    'CHASE_DB1': DatasetConfig('.jpg', '_1stHO.png', '', 1024, 1024, [113.953, 39.807, 6.880], None),
+    'Artery': DatasetConfig('.bmp', '_all.bmp', '', 400, 400, [164.420, 51.826, 27.130], None),  # last value is the label values assigned to gt
+    'HRF': DatasetConfig('.bmp', '.tif', '', 768, 768, [164.420, 51.826, 27.130], None)
 }
 
 

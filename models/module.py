@@ -6,9 +6,13 @@ GN_MIN_NUM_G = 8
 GN_MIN_CHS_PER_G = 16
 
 
+
+
+
 class DRIU(nn.Module):
-    def __init__(self):
+    def __init__(self, for_vgn=False):
         super().__init__()
+        self.for_vgn = for_vgn
         mid_channel = 16
         self.conv1_1 = new_conv_layer(3, 64, use_relu=True)
         self.conv1_2 = new_conv_layer(64, 64, use_relu=True)
@@ -43,18 +47,29 @@ class DRIU(nn.Module):
         conv4_3 = self.conv4_3(self.conv4_2(self.conv4_1(pool3)))
 
         spe1 = self.spe_1(conv1_2)
-        resized_spe_2 = self.up_2(self.spe_2(conv2_2))
-        resized_spe_3 = self.up_3(self.spe_3(conv3_3))
-        resized_spe_4 = self.up_4(self.spe_4(conv4_3))
+        spe2 = self.spe_2(conv2_2)
+        resized_spe_2 = self.up_2(spe2)
+        spe3 = self.spe_3(conv3_3)
+        resized_spe_3 = self.up_3(spe3)
+        spe4 = self.spe_4(conv4_3)
+        resized_spe_4 = self.up_4(spe4)
 
         spe_concat = torch.cat([spe1, resized_spe_2, resized_spe_3, resized_spe_4], dim=1)
         output = self.output(spe_concat)
-        return output
+        if not self.for_vgn: return output
+        cnn_feat = {
+            1: spe1,
+            2: spe2,
+            4: spe3,
+            8: spe4
+        }
+        return (cnn_feat, spe_concat, output)
 
 
 class LargeDRIU(nn.Module):
-    def __init__(self):
+    def __init__(self, for_vgn=False):
         super().__init__()
+        self.for_vgn = for_vgn
         mid_channel = 16
         self.conv1_1 = new_conv_layer(3, 64, use_relu=True)
         self.conv1_2 = new_conv_layer(64, 64, use_relu=True)
@@ -97,13 +112,25 @@ class LargeDRIU(nn.Module):
         conv5_3 = self.conv5_3(self.conv5_2(self.conv5_1(pool4)))
 
         spe1 = self.spe_1(conv1_2)
-        resized_spe_2 = self.up_2(self.spe_2(conv2_2))
-        resized_spe_3 = self.up_3(self.spe_3(conv3_3))
-        resized_spe_4 = self.up_4(self.spe_4(conv4_3))
-        resized_spe_5 = self.up_5(self.spe_5(conv5_3))
+        spe2 = self.spe_2(conv2_2)
+        resized_spe_2 = self.up_2(spe2)
+        spe3 = self.spe_3(conv3_3)
+        resized_spe_3 = self.up_3(spe3)
+        spe4 = self.spe_4(conv4_3)
+        resized_spe_4 = self.up_4(spe4)
+        spe5 = self.spe_5(conv5_3)
+        resized_spe_5 = self.up_5(spe5)
         spe_concat = torch.cat([spe1, resized_spe_2, resized_spe_3, resized_spe_4, resized_spe_5], dim=1)
         output = self.output(spe_concat)
-        return output
+        if not self.for_vgn: return output
+        cnn_feat = {
+            1: spe1,
+            2: spe2,
+            4: spe3,
+            8: spe4,
+            16: spe5
+        }
+        return (cnn_feat, spe_concat, output)
 
 
 
@@ -131,3 +158,5 @@ def new_deconv_layer(in_channel, out_channel, ksize=3, stride=1, padding=1,
     layers.append(norm)
     if use_relu: layers.append(nn.ReLU(inplace=True))
     return nn.Sequential(*layers)
+
+

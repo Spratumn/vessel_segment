@@ -4,7 +4,7 @@ import argparse
 import cv2
 
 import config as cfg
-from model import VesselSegmCNN
+from models.cnn import VesselSegmCNN
 import util
 
 
@@ -16,7 +16,7 @@ def parse_args():
     parser.add_argument('--dataset', default='HRF', help='Dataset to use: Can be DRIVE or STARE or CHASE_DB1 or HRF', type=str)
     parser.add_argument('--cnn_model', default='driu', help='CNN model to use', type=str)
     parser.add_argument('--lr', default=1e-02, help='Learning rate to use: Can be any floating point number', type=float)
-    parser.add_argument('--max_iters', default=50000, help='Maximum number of iterations', type=int)
+    parser.add_argument('--max_iters', default=5000, help='Maximum number of iterations', type=int)
     parser.add_argument('--pretrained_model', default='pretrained_model/VGG_imagenet.npy', help='path for a pretrained model(.pth)', type=str)
     parser.add_argument('--save_root', default='log', help='root path to save trained models and test results', type=str)
     args = parser.parse_args()

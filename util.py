@@ -207,8 +207,14 @@ def _get_image_fov_blob(imagepathes, dataset, is_training, use_padding=False):
     for i in range(num_images):
         im = cv2.cvtColor(cv2.imread(imagepathes[i] + dataset_config.image_suffix), cv2.COLOR_BGR2RGB)
         label = cv2.imread(imagepathes[i] + dataset_config.label_suffix, 0)
+
+        if dataset == "Artery" and dataset_config.gt_values is not None:
+            label_ = np.zeros((label.shape[0], label.shape[1])).astype('uint8')
+            for gt_value in dataset_config.gt_values:
+                label_ += np.array(label == gt_value).astype('uint8')
+            label = np.array(label_ > 0).astype('uint8') * 255
+
         label = label.reshape((label.shape[0],label.shape[1],1))
-        # fov = cv2.imread(imagepathes[i] + dataset_config.mask_suffix, 0)
         fov = np.ones(label.shape, dtype=label.dtype)
         if len(fov.shape)==2:
             fov = fov.reshape((fov.shape[0],fov.shape[1],1))
@@ -277,6 +283,11 @@ def _get_graph_fov_blob(imagepathes, dataset, is_training, edge_type='srns_geo_d
         # load images
         im = cv2.cvtColor(cv2.imread(imagepathes[i] + dataset_config.image_suffix), cv2.COLOR_BGR2RGB)
         label = cv2.imread(imagepathes[i] + dataset_config.label_suffix, 0)
+        if dataset == "Artery" and dataset_config.gt_values is not None:
+            label_ = np.zeros((label.shape[0], label.shape[1])).astype('uint8')
+            for gt_value in dataset_config.gt_values:
+                label_ += np.array(label == gt_value).astype('uint8')
+            label = np.array(label_ > 0).astype('uint8') * 255
         label = label.reshape((label.shape[0],label.shape[1],1))
         fov = cv2.imread(imagepathes[i] + dataset_config.mask_suffix, 0)
         if fov.ndim==2:
