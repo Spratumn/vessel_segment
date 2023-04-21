@@ -32,11 +32,11 @@ def run_train(args):
     data_layer_train = util.DataLayer(args.dataset, is_training=True)
     data_layer_test = util.DataLayer(args.dataset, is_training=False)
 
-    log_dir = os.path.join(args.save_root, args.dataset)
+    log_dir = os.path.join(args.save_root, args.dataset, 'CNN')
     model_save_dir = os.path.join(log_dir, 'weights')
     res_save_dir = os.path.join(log_dir, 'graph')
 
-    if not os.path.exists(log_dir): os.mkdir(log_dir)
+    if not os.path.exists(log_dir): os.makedirs(log_dir)
     if not os.path.isdir(model_save_dir): os.mkdir(model_save_dir)
     if not os.path.isdir(res_save_dir): os.mkdir(res_save_dir)
 

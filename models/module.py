@@ -54,16 +54,16 @@ class DRIU(nn.Module):
         spe4 = self.spe_4(conv4_3)
         resized_spe_4 = self.up_4(spe4)
 
-        spe_concat = torch.cat([spe1, resized_spe_2, resized_spe_3, resized_spe_4], dim=1)
-        output = self.output(spe_concat)
-        if not self.for_vgn: return output
+        conv_feats = torch.cat([spe1, resized_spe_2, resized_spe_3, resized_spe_4], dim=1)
+        img_output = self.output(conv_feats)
+        if not self.for_vgn: return img_output
         cnn_feat = {
             1: spe1,
             2: spe2,
             4: spe3,
             8: spe4
         }
-        return (cnn_feat, spe_concat, output)
+        return (cnn_feat, conv_feats, img_output)
 
 
 class LargeDRIU(nn.Module):
