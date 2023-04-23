@@ -108,6 +108,33 @@ def run_train(args):
                     cv2.imwrite(cur_fg_prob_save_path, cur_reshaped_fg_prob_map)
                     cv2.imwrite(cur_output_save_path, cur_reshaped_output)
 
+            for _ in range(int(np.ceil(float(len(data_layer_train.imagepathes)) / cfg.BATCH_SIZE))):
+                # get one batch
+                img_list, blobs_test = data_layer_train.forward()
+
+                imgs = blobs_test['img']
+                labels = blobs_test['label']
+                fov_masks = np.ones(labels.shape, dtype=labels.dtype)
+                *_, fg_prob_map = network.run_batch(imgs, labels, fov_masks, False)
+                fg_prob_map = fg_prob_map * fov_masks.astype(float)
+
+                # save qualitative results
+                cur_batch_size = len(img_list)
+                reshaped_fg_prob_map = fg_prob_map.reshape((cur_batch_size, fg_prob_map.shape[1],fg_prob_map.shape[2]))
+                reshaped_output = reshaped_fg_prob_map >= 0.5
+                for img_idx in range(cur_batch_size):
+                    cur_test_img_path = img_list[img_idx]
+                    temp_name = os.path.basename(cur_test_img_path)
+
+                    cur_reshaped_fg_prob_map = (reshaped_fg_prob_map[img_idx,:,:] * 255).astype(int)
+                    cur_reshaped_output = reshaped_output[img_idx,:,:].astype(int) * 255
+
+                    cur_fg_prob_save_path = os.path.join(res_save_dir, temp_name + '_prob.png')
+                    cur_output_save_path = os.path.join(res_save_dir, temp_name + '_output.png')
+
+                    cv2.imwrite(cur_fg_prob_save_path, cur_reshaped_fg_prob_map)
+                    cv2.imwrite(cur_output_save_path, cur_reshaped_output)
+
             auc_test, ap_test = util.get_auc_ap_score(all_labels, all_preds)
             all_labels_bin = np.copy(all_labels).astype(np.bool)
             all_preds_bin = all_preds >= 0.5
