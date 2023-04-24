@@ -21,14 +21,14 @@ def parse_args():
     Parse input arguments
     """
     parser = argparse.ArgumentParser(description='Train a vessel_segm_vgn network')
-    parser.add_argument('--dataset', default='HRF', help='Dataset to use: Can be DRIVE or STARE or CHASE_DB1 or HRF', type=str)
+    parser.add_argument('--dataset', default='Artery', help='Dataset to use: Can be DRIVE or STARE or CHASE_DB1 or HRF', type=str)
     parser.add_argument('--use_multiprocessing', default=True, help='Whether to use the python multiprocessing module', type=bool)
     parser.add_argument('--multiprocessing_num_proc', default=8, help='Number of CPU processes to use', type=int)
     parser.add_argument('--win_size', default=8, help='Window size for srns', type=int) # for srns # [4,8,16]
-    parser.add_argument('--edge_type', default='srns_geo_dist_binary', \
+    parser.add_argument('--edge_type', default='srns_geo_dist_binary',
                         help='Graph edge type: Can be srns_geo_dist_binary or srns_geo_dist_weighted', type=str)
     parser.add_argument('--edge_geo_dist_thresh', default=10, help='Threshold for geodesic distance', type=float) # [10,20,40]
-    parser.add_argument('--pretrained_model', default='./DRIU_HRF/train/DRIU_HRF.ckpt', \
+    parser.add_argument('--pretrained_model', default=None,
                         help='Path for a pretrained model(.ckpt)', type=str)
     parser.add_argument('--save_root', default='log', help='root path to save trained models and test results', type=str)
 
@@ -48,24 +48,25 @@ def parse_args():
     parser.add_argument('--gat_use_residual', action='store_true', default=False, help='Whether to use residual learning in GAT')
 
     ### inference module related ###
-    parser.add_argument('--use_enc_layer', action='store_true', default=False, \
+    parser.add_argument('--use_enc_layer', action='store_true', default=False,
                         help='Whether to use additional conv. layers in the inference module')
-    parser.add_argument('--infer_module_loss_masking_thresh', default=0.05, \
+    parser.add_argument('--infer_module_loss_masking_thresh', default=0.05,
                         help='Threshold for loss masking', type=float)
-    parser.add_argument('--infer_module_kernel_size', default=3, \
+    parser.add_argument('--infer_module_kernel_size', default=3,
                         help='Conv. kernel size for the inference module', type=int)
-    parser.add_argument('--infer_module_grad_weight', default=1., \
+    parser.add_argument('--infer_module_grad_weight', default=1.,
                         help='Relative weight of the grad. on the inference module', type=float)
-    parser.add_argument('--infer_module_dropout_prob', default=0.1, \
+    parser.add_argument('--infer_module_dropout_prob', default=0.1,
                         help='Dropout prob. for layers in the inference module', type=float)
 
     ### training (declared but not used) ###
+    parser.add_argument('--lr', default=1e-02, help='Learning rate to use: Can be any floating point number', type=float)
     parser.add_argument('--max_iters', default=5000, help='Maximum number of iterations', type=int)
     #parser.add_argument('--use_graph_update', action='store_true', default=False, help='Whether to update graphs during training')
-    parser.add_argument('--use_graph_update', default=True, \
+    parser.add_argument('--use_graph_update', default=True,
                         help='Whether to update graphs during training', type=bool)
     parser.add_argument('--graph_update_period', default=10000, help='Graph update period', type=int)
-    parser.add_argument('--use_fov_mask', default=True, help='Whether to use fov masks', type=bool)
+    parser.add_argument('--use_fov_mask', default=False, help='Whether to use fov masks', type=bool)
 
     args = parser.parse_args()
     return args
@@ -153,16 +154,16 @@ def run_train(args):
     log_dir = os.path.join(args.save_root, args.dataset, 'VGN')
     model_save_dir = os.path.join(log_dir, 'weights')
     res_save_dir = os.path.join(log_dir, 'graph')
-
+    print(res_save_dir)
     if not os.path.exists(log_dir): os.makedirs(log_dir)
     if not os.path.isdir(model_save_dir): os.mkdir(model_save_dir)
     if not os.path.isdir(res_save_dir): os.mkdir(res_save_dir)
 
-    data_layer_train = util.GraphDataLayer(args.dataset, is_training=True,
+    data_layer_train = util.GraphDataLayer(args.dataset, 'train.txt', is_training=True,
                                            edge_type=args.edge_type,
                                            win_size=args.win_size,
                                            edge_geo_dist_thresh=args.edge_geo_dist_thresh)
-    data_layer_test = util.GraphDataLayer(args.dataset, is_training=False,
+    data_layer_test = util.GraphDataLayer(args.dataset, 'test.txt', is_training=False,
                                           edge_type=args.edge_type,
                                           win_size=args.win_size,
                                           edge_geo_dist_thresh=args.edge_geo_dist_thresh)
@@ -171,7 +172,9 @@ def run_train(args):
     len_train = len(data_layer_train.imagepathes)
     len_test = len(data_layer_test.imagepathes)
 
-    network = VesselSegmVGN(args)
+    _, blobs_train = data_layer_train.forward()
+    image_height, image_width = blobs_train['img'].shape[2:]
+    network = VesselSegmVGN(args, image_width, image_height)
 
     if args.pretrained_model is not None:
         print("Loading model...")
@@ -209,14 +212,12 @@ def run_train(args):
     test_loss_logs = []
     print("Training the model...")
     for iter in range(args.max_iters):
-
         timer.tic()
-
         # get one batch
         img_list, blobs_train = data_layer_train.forward()
-
         imgs = blobs_train['img']
         labels = blobs_train['label']
+
         if args.use_fov_mask:
             fov_masks = blobs_train['fov']
         else:
@@ -226,6 +227,7 @@ def run_train(args):
         num_of_nodes_list = blobs_train['num_of_nodes_list']
 
         node_byxs = util.get_node_byx_from_graph(graph, num_of_nodes_list)
+
         probmap = blobs_train['probmap']
         pixel_weights = fov_masks*((probmap>=args.infer_module_loss_masking_thresh) | labels)
         pixel_weights = pixel_weights.astype(float)
@@ -253,6 +255,7 @@ def run_train(args):
         result_dict_train = network.run_batch(imgs, labels, fov_masks, node_byxs, adj_norm,
                                               pixel_weights, is_lr_flipped, is_ud_flipped,
                                               is_train=True)
+
         loss_val, cnn_fg_prob_mat, cnn_loss_val, cnn_accuracy_val, cnn_precision_val, cnn_recall_val, \
         gnn_loss_val, gnn_accuracy_val, infer_module_fg_prob_mat, \
         infer_module_loss_val, infer_module_accuracy_val, \
@@ -266,14 +269,13 @@ def run_train(args):
         result_dict_train['post_cnn_recall']
 
         timer.toc()
-        train_loss_list.append(loss_val)
-        train_cnn_loss_list.append(cnn_loss_val)
-        train_gnn_loss_list.append(gnn_loss_val)
-        train_infer_module_loss_list.append(infer_module_loss_val)
+        train_loss_list.append(loss_val.item())
+        train_cnn_loss_list.append(cnn_loss_val.item())
+        train_gnn_loss_list.append(gnn_loss_val.item())
+        train_infer_module_loss_list.append(infer_module_loss_val.item())
 
         if (iter+1) % (cfg.DISPLAY) == 0:
-            print('iter: %d / %d, loss: %.4f'\
-                    %(iter+1, args.max_iters, loss_val))
+            print('iter: %d / %d, loss: %.4f'%(iter+1, args.max_iters, loss_val))
             print('cnn_loss: %.4f, cnn_accuracy: %.4f, cnn_precision: %.4f, cnn_recall: %.4f'\
                     %(cnn_loss_val, cnn_accuracy_val, cnn_precision_val, cnn_recall_val))
             print('gnn_loss: %.4f, gnn_accuracy: %.4f'\
@@ -336,18 +338,18 @@ def run_train(args):
                 # get one batch
                 img_list, blobs_test = data_layer_test.forward()
 
-                img = blobs_test['img']
-                label = blobs_test['label']
+                imgs = blobs_test['img']
+                labels = blobs_test['label']
                 if args.use_fov_mask:
-                    fov_mask = blobs_test['fov']
+                    fov_masks = blobs_test['fov']
                 else:
-                    fov_mask = np.ones(label.shape, dtype=label.dtype)
+                    fov_masks = np.ones(labels.shape, dtype=labels.dtype)
 
                 graph = blobs_test['graph']
                 num_of_nodes_list = blobs_test['num_of_nodes_list']
 
                 node_byxs = util.get_node_byx_from_graph(graph, num_of_nodes_list)
-                pixel_weights = fov_mask
+                pixel_weights = fov_masks
 
                 if 'geo_dist_weighted' in args.edge_type:
                     adj = nx.adjacency_matrix(graph)
@@ -359,7 +361,7 @@ def run_train(args):
 
                 result_dict_test = network.run_batch(imgs, labels, fov_masks,
                                                      node_byxs=node_byxs,
-                                                     adj_norm=adj_norm,
+                                                     adj=adj_norm,
                                                      pixel_weights=pixel_weights,
                                                      is_lr_flipped=False,
                                                      is_ud_flipped=False,
@@ -374,15 +376,20 @@ def run_train(args):
                 result_dict_test['post_cnn_img_fg_prob'], result_dict_test['post_cnn_loss']
 
 
-                cnn_fg_prob_mat = cnn_fg_prob_mat*fov_mask.astype(float)
-                infer_module_fg_prob_mat = infer_module_fg_prob_mat*fov_mask.astype(float)
+                gnn_labels = gnn_labels.detach().cpu().numpy()
+                gnn_prob_vec = gnn_prob_vec.detach().cpu().numpy()
+                cnn_fg_prob_mat = cnn_fg_prob_mat.detach().cpu().numpy()
+                infer_module_fg_prob_mat = infer_module_fg_prob_mat.detach().cpu().numpy()
 
-                test_loss_list.append(loss_val)
-                test_cnn_loss_list.append(cnn_loss_val)
-                test_gnn_loss_list.append(gnn_loss_val)
-                test_infer_module_loss_list.append(infer_module_loss_val)
+                cnn_fg_prob_mat = cnn_fg_prob_mat*fov_masks.astype(float)
+                infer_module_fg_prob_mat = infer_module_fg_prob_mat*fov_masks.astype(float)
 
-                all_cnn_labels = np.concatenate((all_cnn_labels,np.reshape(label, (-1))))
+                test_loss_list.append(loss_val.item())
+                test_cnn_loss_list.append(cnn_loss_val.item())
+                test_gnn_loss_list.append(gnn_loss_val.item())
+                test_infer_module_loss_list.append(infer_module_loss_val.item())
+
+                all_cnn_labels = np.concatenate((all_cnn_labels,np.reshape(labels, (-1))))
                 all_cnn_preds = np.concatenate((all_cnn_preds,np.reshape(cnn_fg_prob_mat, (-1))))
 
                 all_gnn_labels = np.concatenate((all_gnn_labels,gnn_labels))
@@ -395,8 +402,7 @@ def run_train(args):
                 reshaped_cnn_fg_prob_map = cnn_fg_prob_mat.reshape((cur_batch_size,cnn_fg_prob_mat.shape[1],cnn_fg_prob_mat.shape[2]))
                 reshaped_infer_module_fg_prob_mat = infer_module_fg_prob_mat.reshape((cur_batch_size,infer_module_fg_prob_mat.shape[1],infer_module_fg_prob_mat.shape[2]))
                 for j in range(cur_batch_size):
-                    cur_img_name = img_list[j]
-                    cur_img_name = cur_img_name[util.find(cur_img_name,'/')[-1]:]
+                    cur_img_name = os.path.basename(img_list[j])
 
                     cur_cnn_fg_prob_map = reshaped_cnn_fg_prob_map[j,:,:]
                     cur_infer_module_fg_prob_map = reshaped_infer_module_fg_prob_mat[j,:,:]
@@ -404,7 +410,6 @@ def run_train(args):
                     cur_map = (cur_cnn_fg_prob_map*255).astype(int)
                     cur_save_path = os.path.join(res_save_dir, cur_img_name + '_prob_cnn.png')
                     skimage.io.imsave(cur_save_path, cur_map)
-
                     cur_map = (cur_infer_module_fg_prob_map*255).astype(int)
                     cur_save_path = os.path.join(res_save_dir, cur_img_name + '_prob_infer_module.png')
                     skimage.io.imsave(cur_save_path, cur_map)
@@ -425,8 +430,6 @@ def run_train(args):
             all_infer_module_preds_bin = all_infer_module_preds>=0.5
             all_infer_module_correct = all_cnn_labels_bin==all_infer_module_preds_bin
             infer_module_acc_test = np.mean(all_infer_module_correct.astype(np.float32))
-
-
 
             print('iter: %d / %d, train_loss: %.4f, train_cnn_loss: %.4f, train_gnn_loss: %.4f, train_infer_module_loss: %.4f'\
                 %(iter+1, args.max_iters, np.mean(train_loss_list), np.mean(train_cnn_loss_list), np.mean(train_gnn_loss_list), np.mean(train_infer_module_loss_list)))

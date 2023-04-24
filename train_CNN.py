@@ -13,7 +13,7 @@ def parse_args():
     Parse input arguments
     """
     parser = argparse.ArgumentParser(description='Train a vessel_segm_cnn network')
-    parser.add_argument('--dataset', default='HRF', help='Dataset to use: Can be DRIVE or STARE or CHASE_DB1 or HRF', type=str)
+    parser.add_argument('--dataset', default='Artery', help='Dataset to use: Can be Artery or HRF', type=str)
     parser.add_argument('--cnn_model', default='driu', help='CNN model to use', type=str)
     parser.add_argument('--lr', default=1e-02, help='Learning rate to use: Can be any floating point number', type=float)
     parser.add_argument('--max_iters', default=5000, help='Maximum number of iterations', type=int)
@@ -29,8 +29,8 @@ def run_train(args):
     print('Called with args:')
     print(args)
 
-    data_layer_train = util.DataLayer(args.dataset, is_training=True)
-    data_layer_test = util.DataLayer(args.dataset, is_training=False)
+    data_layer_train = util.DataLayer(args.dataset, 'train.txt', is_training=True)
+    data_layer_test = util.DataLayer(args.dataset, 'test.txt', is_training=False)
 
     log_dir = os.path.join(args.save_root, args.dataset, 'CNN')
     model_save_dir = os.path.join(log_dir, 'weights')
@@ -91,33 +91,6 @@ def run_train(args):
                 all_labels = np.concatenate((all_labels, np.reshape(labels, (-1))))
                 fg_prob_map = fg_prob_map * fov_masks.astype(float)
                 all_preds = np.concatenate((all_preds, np.reshape(fg_prob_map, (-1))))
-                # save qualitative results
-                cur_batch_size = len(img_list)
-                reshaped_fg_prob_map = fg_prob_map.reshape((cur_batch_size, fg_prob_map.shape[1],fg_prob_map.shape[2]))
-                reshaped_output = reshaped_fg_prob_map >= 0.5
-                for img_idx in range(cur_batch_size):
-                    cur_test_img_path = img_list[img_idx]
-                    temp_name = os.path.basename(cur_test_img_path)
-
-                    cur_reshaped_fg_prob_map = (reshaped_fg_prob_map[img_idx,:,:] * 255).astype(int)
-                    cur_reshaped_output = reshaped_output[img_idx,:,:].astype(int) * 255
-
-                    cur_fg_prob_save_path = os.path.join(res_save_dir, temp_name + '_prob.png')
-                    cur_output_save_path = os.path.join(res_save_dir, temp_name + '_output.png')
-
-                    cv2.imwrite(cur_fg_prob_save_path, cur_reshaped_fg_prob_map)
-                    cv2.imwrite(cur_output_save_path, cur_reshaped_output)
-
-            for _ in range(int(np.ceil(float(len(data_layer_train.imagepathes)) / cfg.BATCH_SIZE))):
-                # get one batch
-                img_list, blobs_test = data_layer_train.forward()
-
-                imgs = blobs_test['img']
-                labels = blobs_test['label']
-                fov_masks = np.ones(labels.shape, dtype=labels.dtype)
-                *_, fg_prob_map = network.run_batch(imgs, labels, fov_masks, False)
-                fg_prob_map = fg_prob_map * fov_masks.astype(float)
-
                 # save qualitative results
                 cur_batch_size = len(img_list)
                 reshaped_fg_prob_map = fg_prob_map.reshape((cur_batch_size, fg_prob_map.shape[1],fg_prob_map.shape[2]))

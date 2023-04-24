@@ -24,7 +24,7 @@ class VesselSegmCNN():
         print(f"Model built on {self.device}.")
         opt_params = {
             'params': filter(lambda p: p.requires_grad, self.cnn_model.parameters()),
-            'lr': params.lr,
+            'lr': params.lr if 'lr' in params else 1e-02,
             'weight_decay': cfg.WEIGHT_DECAY_RATE
             }
         self.optimizer = opt.Adam(**opt_params)
@@ -64,14 +64,17 @@ class VesselSegmCNN():
 
     def forward(self, imgs, is_train=False):
         input_imgs = torch.from_numpy(imgs).to(self.device)
-        if is_train: return self.cnn_model(input_imgs)
-        with torch.no_grad():
-            return self.cnn_model(input_imgs)
+        if is_train:
+            output = self.cnn_model(input_imgs)
+        else:
+            with torch.no_grad():
+                output = self.cnn_model(input_imgs)
+        return output.permute([0, 2, 3, 1])
 
     def run_batch(self, imgs, labels, fov_masks, is_train=True):
         if is_train:
             self.optimizer.zero_grad(set_to_none=True)
-        output = self.forward(imgs, is_train).permute([0, 2, 3, 1])
+        output = self.forward(imgs, is_train)
         labels = torch.from_numpy(labels).to(self.device).long()
         fov_masks = torch.from_numpy(fov_masks).to(self.device).long()
         fg_prob = torch.sigmoid(output)

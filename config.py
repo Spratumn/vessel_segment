@@ -17,29 +17,21 @@ Artery_vessel_values = {
 }
 
 DATASET_CONFIGS = {
-    'CHASE_DB1': DatasetConfig('.jpg', '_1stHO.png', '', 1024, 1024, [113.953, 39.807, 6.880], None),
     'Artery': DatasetConfig('.bmp', '_all.bmp', '', 400, 400, [164.420, 51.826, 27.130], None),  # last value is the label values assigned to gt
     'HRF': DatasetConfig('.bmp', '.tif', '', 768, 768, [164.420, 51.826, 27.130], None)
 }
 
 
 
-
-##### Feature normalization #####
-
-USE_BRN = True
-
-
 ##### Training (general) #####
-
-MODEL_SAVE_PATH = 'train'
 DISPLAY = 10
 TEST_ITERS = 100
 SNAPSHOT_ITERS = 500
+
+
 WEIGHT_DECAY_RATE = 0.0005
-MOMENTUM = 0.9
-BATCH_SIZE = 1 # for CNN
-GRAPH_BATCH_SIZE = 1 # for VGN
+BATCH_SIZE = 8 # for CNN
+GRAPH_BATCH_SIZE = 4 # for VGN
 
 ##### Training (augmentation) #####
 

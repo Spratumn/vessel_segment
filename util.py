@@ -30,12 +30,11 @@ DEBUG = False
 
 
 class DataLayer(object):
-    def __init__(self, dataset, is_training, use_padding=False):
+    def __init__(self, dataset, ds_filename, is_training, use_padding=False):
         """Set the db to be used by this layer."""
         self.dataset = dataset
         dataset_root_dir = f'datasets/{dataset}'
         assert os.path.exists(dataset_root_dir)
-        ds_filename = 'train.txt' if is_training else 'test.txt'
         with open(os.path.join(dataset_root_dir, ds_filename)) as f:
             self.imagepathes = [filepath.rstrip('\n') for filepath in f.readlines()]
         self._is_training = is_training
@@ -91,14 +90,13 @@ class DataLayer(object):
 
 
 class GraphDataLayer(object):
-    def __init__(self, dataset, is_training,
+    def __init__(self, dataset, ds_filename, is_training,
                  edge_type='srns_geo_dist_binary',
                  win_size=8, edge_geo_dist_thresh=20):
         """Set the db to be used by this layer."""
         self.dataset = dataset
         dataset_root_dir = f'datasets/{dataset}'
         assert os.path.exists(dataset_root_dir)
-        ds_filename = 'train.txt' if is_training else 'test.txt'
         with open(os.path.join(dataset_root_dir, ds_filename)) as f:
             self.imagepathes = [filepath.rstrip('\n') for filepath in f.readlines()]
         self._is_training = is_training
@@ -185,7 +183,7 @@ def get_minibatch(imagepathes, dataset, is_training,
         im_blob, label_blob, fov_blob, probmap_blob, \
         all_union_graph, \
         num_of_nodes_list, vec_aug_on, rot_angle = \
-        _get_graph_fov_blob(imagepathes, is_training, edge_type, win_size, edge_geo_dist_thresh)
+        _get_graph_fov_blob(imagepathes, dataset, is_training, edge_type, win_size, edge_geo_dist_thresh)
 
         blobs = {'img': im_blob, 'label': label_blob, 'fov': fov_blob, 'probmap': probmap_blob,
                  'graph': all_union_graph,
@@ -207,6 +205,13 @@ def _get_image_fov_blob(imagepathes, dataset, is_training, use_padding=False):
     for i in range(num_images):
         im = cv2.cvtColor(cv2.imread(imagepathes[i] + dataset_config.image_suffix), cv2.COLOR_BGR2RGB)
         label = cv2.imread(imagepathes[i] + dataset_config.label_suffix, 0)
+        h_im, w_im = im.shape[:2]
+        h_l, w_l = label.shape[:2]
+        if h_l > h_im or w_l > w_im:
+            label = label[:h_im, :w_im]
+        if h_im != dataset_config.len_y or w_im != dataset_config.len_x:
+            im = cv2.resize(im, (dataset_config.len_x, dataset_config.len_y))
+            label = cv2.resize(label, (dataset_config.len_x, dataset_config.len_y))
 
         if dataset == "Artery" and dataset_config.gt_values is not None:
             label_ = np.zeros((label.shape[0], label.shape[1])).astype('uint8')
@@ -283,17 +288,25 @@ def _get_graph_fov_blob(imagepathes, dataset, is_training, edge_type='srns_geo_d
         # load images
         im = cv2.cvtColor(cv2.imread(imagepathes[i] + dataset_config.image_suffix), cv2.COLOR_BGR2RGB)
         label = cv2.imread(imagepathes[i] + dataset_config.label_suffix, 0)
+        h_im, w_im = im.shape[:2]
+        h_l, w_l = label.shape[:2]
+        if h_l > h_im or w_l > w_im:
+            label = label[:h_im, :w_im]
+        if h_im != dataset_config.len_y or w_im != dataset_config.len_x:
+            im = cv2.resize(im, (dataset_config.len_x, dataset_config.len_y))
+            label = cv2.resize(label, (dataset_config.len_x, dataset_config.len_y))
         if dataset == "Artery" and dataset_config.gt_values is not None:
             label_ = np.zeros((label.shape[0], label.shape[1])).astype('uint8')
             for gt_value in dataset_config.gt_values:
                 label_ += np.array(label == gt_value).astype('uint8')
             label = np.array(label_ > 0).astype('uint8') * 255
         label = label.reshape((label.shape[0],label.shape[1],1))
-        fov = cv2.imread(imagepathes[i] + dataset_config.mask_suffix, 0)
-        if fov.ndim==2:
+        fov = np.ones(label.shape, dtype=label.dtype)
+        if len(fov.shape)==2:
             fov = fov.reshape((fov.shape[0],fov.shape[1],1))
         else:
             fov = fov[:,:,[0]]
+
         imagename = os.path.basename(imagepathes[i])
         probmap = cv2.imread(os.path.join(f'datasets/{dataset}', 'graph', imagename+'_prob.png'), 0) # cnn results will be used for loss masking
         probmap = probmap.reshape((probmap.shape[0],probmap.shape[1],1))
@@ -315,14 +328,15 @@ def _get_graph_fov_blob(imagepathes, dataset, is_training, edge_type='srns_geo_d
         if 'srns' not in edge_type:
             raise NotImplementedError
         else:
-            win_size_str = '_%.2d_%.2d'%(win_size,edge_geo_dist_thresh)
-            graph = nx.read_gpickle(os.path.join(f'datasets/{dataset}', 'graph', imagename + '_' + win_size_str + '.graph_res'))
+            win_size_str = '%.2d_%.2d'%(win_size,edge_geo_dist_thresh)
+            graph_path = os.path.join(f'datasets/{dataset}', 'graph', imagename + '_' + win_size_str + '.graph_res')
+            graph = nx.read_gpickle(graph_path)
 
         union_graph = nx.convert_node_labels_to_integers(graph)
         n_nodes_in_graph = union_graph.number_of_nodes()
         node_idx_map = np.zeros(im.shape[:2])
         for j in range(n_nodes_in_graph):
-            node_idx_map[union_graph.nodes[j]['y'],union_graph.nodes[j]['x']] = j+1
+            node_idx_map[int(union_graph.nodes[j]['y']),int(union_graph.nodes[j]['x'])] = j+1
 
         if num_graphs > 1: # not used
             raise NotImplementedError
@@ -331,7 +345,7 @@ def _get_graph_fov_blob(imagepathes, dataset, is_training, edge_type='srns_geo_d
             vec_aug_on, (crop_y1,crop_y2,crop_x1,crop_x2), rot_angle = \
             prep_im_label_fov_probmap_for_blob(im, label, fov, probmap, node_idx_map,
                                                dataset_config.pixel_mean, is_training, win_size)
-
+        processed_im = np.transpose(processed_im, axes=[2, 0, 1])
         processed_ims.append(processed_im)
         processed_labels.append(processed_label)
         processed_fovs.append(processed_fov)
@@ -674,7 +688,7 @@ def visualize_graph(im, graph, show_graph=False, save_graph=True,
     pos = {}
     node_list = list(graph.nodes)
     for i in node_list:
-        pos[i] = [graph.nodes[i]['x'],graph.nodes[i]['y']]
+        pos[i] = [int(graph.nodes[i]['x']), int(graph.nodes[i]['y'])]
 
     if custom_node_color is not None:
         node_color = custom_node_color
@@ -730,7 +744,7 @@ def get_node_byx_from_graph(graph, num_of_nodes_list):
     node_idx = 0
     for sub_graph_idx, cur_num_nodes in enumerate(num_of_nodes_list):
         for i in range(node_idx,node_idx+cur_num_nodes):
-            node_byxs[i,:] = [sub_graph_idx,graph.nodes[i]['y'],graph.nodes[i]['x']]
+            node_byxs[i,:] = [sub_graph_idx, int(graph.nodes[i]['y']),int(graph.nodes[i]['x'])]
         node_idx = node_idx+cur_num_nodes
 
     return node_byxs
