@@ -7,8 +7,6 @@ GN_MIN_CHS_PER_G = 16
 
 
 
-
-
 class DRIU(nn.Module):
     def __init__(self, for_vgn=False):
         super().__init__()
@@ -57,6 +55,10 @@ class DRIU(nn.Module):
         conv_feats = torch.cat([spe1, resized_spe_2, resized_spe_3, resized_spe_4], dim=1)
         img_output = self.output(conv_feats)
         if not self.for_vgn: return img_output
+        assert not torch.any(torch.isnan(spe1))
+        assert not torch.any(torch.isnan(spe2))
+        assert not torch.any(torch.isnan(spe3))
+        assert not torch.any(torch.isnan(spe4))
         cnn_feat = {
             1: spe1,
             2: spe2,

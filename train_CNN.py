@@ -65,7 +65,7 @@ def run_train(args):
 
         if (iter+1) % (cfg.DISPLAY) == 0:
             print('iter: %d / %d, loss: %.4f, accuracy: %.4f, precision: %.4f, recall: %.4f'\
-                    %(iter+1, args.max_iters, loss_val, accuracy_val, pre_val, rec_val))
+                  %(iter+1, args.max_iters, loss_val, accuracy_val, pre_val, rec_val))
             print('speed: {:.3f}s / iter'.format(timer.average_time))
 
         if (iter+1) % cfg.SNAPSHOT_ITERS == 0:

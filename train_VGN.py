@@ -23,7 +23,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Train a vessel_segm_vgn network')
     parser.add_argument('--dataset', default='Artery', help='Dataset to use: Can be DRIVE or STARE or CHASE_DB1 or HRF', type=str)
     parser.add_argument('--use_multiprocessing', default=True, help='Whether to use the python multiprocessing module', type=bool)
-    parser.add_argument('--multiprocessing_num_proc', default=8, help='Number of CPU processes to use', type=int)
+    parser.add_argument('--multiprocessing_num_proc', default=36, help='Number of CPU processes to use', type=int)
     parser.add_argument('--win_size', default=8, help='Window size for srns', type=int) # for srns # [4,8,16]
     parser.add_argument('--edge_type', default='srns_geo_dist_binary',
                         help='Graph edge type: Can be srns_geo_dist_binary or srns_geo_dist_weighted', type=str)
@@ -44,7 +44,6 @@ def parse_args():
     # gat #
     parser.add_argument('--gat_n_heads', default=[4,4], help='Numbers of heads in each layer', type=list) # [4,1]
     parser.add_argument('--gat_hid_units', default=[16], help='Numbers of hidden units per each attention head in each layer', type=list)
-    #parser.add_argument('--gat_hid_units', nargs='+', help='Numbers of hidden units per each attention head in each layer', type=int)
     parser.add_argument('--gat_use_residual', action='store_true', default=False, help='Whether to use residual learning in GAT')
 
     ### inference module related ###
@@ -60,12 +59,12 @@ def parse_args():
                         help='Dropout prob. for layers in the inference module', type=float)
 
     ### training (declared but not used) ###
-    parser.add_argument('--lr', default=1e-02, help='Learning rate to use: Can be any floating point number', type=float)
+    parser.add_argument('--lr', default=1e-04, help='Learning rate to use: Can be any floating point number', type=float)
+    parser.add_argument('--lr_steps', default=[1000, 2000, 3000, 4000], help='When to decrease the lr during training', type=float)
+    parser.add_argument('--lr_gamma', default=0.5, help='lr decay rate during training', type=float)
     parser.add_argument('--max_iters', default=5000, help='Maximum number of iterations', type=int)
-    #parser.add_argument('--use_graph_update', action='store_true', default=False, help='Whether to update graphs during training')
-    parser.add_argument('--use_graph_update', default=True,
-                        help='Whether to update graphs during training', type=bool)
-    parser.add_argument('--graph_update_period', default=10000, help='Graph update period', type=int)
+    parser.add_argument('--use_graph_update', default=True, help='Whether to update graphs during training', type=bool)
+    parser.add_argument('--graph_update_period', default=1500, help='Graph update period', type=int)
     parser.add_argument('--use_fov_mask', default=False, help='Whether to use fov masks', type=bool)
 
     args = parser.parse_args()
@@ -78,11 +77,8 @@ def make_train_qual_res(args_tuple):
         raise NotImplementedError
 
     win_size_str = '%.2d_%.2d'%(args.win_size, args.edge_geo_dist_thresh)
-
-    cur_filename = img_name[util.find(img_name,'/')[-1]+1:]
-
-    print('regenerating a graph for ' + cur_filename)
-
+    cur_filename = os.path.basename(img_name)
+    print('Regenerating a graph for ' + cur_filename + '...')
     temp = (fg_prob_map*255).astype(int)
     cur_save_path = os.path.join(temp_graph_save_path, cur_filename+'_prob.png')
     skimage.io.imsave(cur_save_path, temp)
@@ -111,19 +107,14 @@ def make_train_qual_res(args_tuple):
                 max_val.append(np.amax(cur_patch))
                 temp = np.unravel_index(cur_patch.argmax(), cur_patch.shape)
                 max_pos.append((y_quan[y_idx]+temp[0],x_quan[x_idx]+temp[1]))
-
     graph = nx.Graph()
-
     # add nodes
     for node_idx, (node_y, node_x) in enumerate(max_pos):
         graph.add_node(node_idx, kind='MP', y=node_y, x=node_x, label=node_idx)
-        print('node label', node_idx, 'pos', (node_y,node_x), 'added')
-
+        # print('node label', node_idx, 'pos', (node_y,node_x), 'added')
     speed = vesselness
-
     node_list = list(graph.nodes)
     for i, n in enumerate(node_list):
-
         phi = np.ones_like(speed)
         phi[graph.node[n]['y'],graph.node[n]['x']] = -1
         if speed[graph.node[n]['y'],graph.node[n]['x']]==0:
@@ -135,13 +126,11 @@ def make_train_qual_res(args_tuple):
             continue
 
         tt = skfmm.travel_time(phi, speed, narrow=args.edge_geo_dist_thresh) # travel time
-
         for n_comp in node_list[i+1:]:
             geo_dist = tt[graph.node[n_comp]['y'],graph.node[n_comp]['x']] # travel time
             if geo_dist < args.edge_geo_dist_thresh:
                 graph.add_edge(n, n_comp, weight=args.edge_geo_dist_thresh/(args.edge_geo_dist_thresh+geo_dist))
-                print('An edge BTWN', 'node', n, '&', n_comp, 'is constructed')
-
+                # print('An edge BTWN', 'node', n, '&', n_comp, 'is constructed')
     # save as files
     nx.write_gpickle(graph, cur_res_graph_savepath, protocol=pkl.HIGHEST_PROTOCOL)
     graph.clear()
@@ -150,11 +139,12 @@ def make_train_qual_res(args_tuple):
 def run_train(args):
     print('Called with args:')
     print(args)
-
+    if args.use_multiprocessing:
+        pool = multiprocessing.Pool(processes=args.multiprocessing_num_proc)
+    train_graph_dir = f'datasets/{args.dataset}/graph'
     log_dir = os.path.join(args.save_root, args.dataset, 'VGN')
     model_save_dir = os.path.join(log_dir, 'weights')
     res_save_dir = os.path.join(log_dir, 'graph')
-    print(res_save_dir)
     if not os.path.exists(log_dir): os.makedirs(log_dir)
     if not os.path.isdir(model_save_dir): os.mkdir(model_save_dir)
     if not os.path.isdir(res_save_dir): os.mkdir(res_save_dir)
@@ -180,7 +170,7 @@ def run_train(args):
         print("Loading model...")
         model_suffix = os.path.basename(args.pretrained_model)
         if model_suffix.endswith('pth'):
-            network.load_cnn(args.pretrained_model)
+            network.load_model(args.pretrained_model)
         elif model_suffix.endswith('npy'):
             network.load_npy(args.pretrained_model)
 
@@ -191,11 +181,11 @@ def run_train(args):
     timer = util.Timer()
 
     # for graph update
-    required_num_iters_for_train_set_update = int(np.ceil(float(len_train)/cfg.GRAPH_BATCH_SIZE))
-    required_num_iters_for_test_set_update = int(np.ceil(float(len_test)/cfg.GRAPH_BATCH_SIZE))
+    required_num_iters_for_train_set_update = len_train
+
     if args.use_graph_update:
         next_update_start = args.graph_update_period
-        next_update_end = next_update_start + required_num_iters_for_train_set_update-1
+        next_update_end = next_update_start + len_train - 1
     else:
         next_update_start = sys.maxint
         next_update_end = sys.maxint
@@ -247,11 +237,6 @@ def run_train(args):
         if blobs_train['vec_aug_on'][1]:
             is_ud_flipped = True
 
-        # print(len(adj_norm)) # 3
-        # print(adj_norm[0].shape) # shap: 24588, 2
-        # print(adj_norm[1].shape) # shap: 24588,
-        # print(adj_norm[2]) # [9216, 9216]
-
         result_dict_train = network.run_batch(imgs, labels, fov_masks, node_byxs, adj_norm,
                                               pixel_weights, is_lr_flipped, is_ud_flipped,
                                               is_train=True)
@@ -297,20 +282,24 @@ def run_train(args):
                                     edge_geo_dist_thresh=args.edge_geo_dist_thresh)
 
         if ((iter+1) < args.max_iters) and ((iter+1) >= next_update_start) and ((iter+1) <= next_update_end):
-
             # save qualitative results
             # here, we make (segm. and corresponding) graphs,
             # which will be used as GT graphs during a next training period,
             # from current estimated vesselnesses
             cur_batch_size = len(img_list)
-            reshaped_fg_prob_map = infer_module_fg_prob_mat.reshape((cur_batch_size,infer_module_fg_prob_mat.shape[1],infer_module_fg_prob_mat.shape[2]))
+            infer_module_fg_prob_mat = infer_module_fg_prob_mat.detach().cpu().numpy()
+            reshaped_fg_prob_map = np.reshape(infer_module_fg_prob_mat,
+                                              (cur_batch_size, infer_module_fg_prob_mat.shape[1], infer_module_fg_prob_mat.shape[2]))
 
             for j in range(cur_batch_size):
-                graph_update_func_arg.append((img_list[j], reshaped_fg_prob_map[j,:,:], res_save_dir, args))
+                graph_update_func_arg.append((img_list[j], reshaped_fg_prob_map[j,:,:], train_graph_dir, args))
 
         if (iter+1) == next_update_end:
-            for x in graph_update_func_arg:
-                make_train_qual_res(x)
+            if args.use_multiprocessing:
+                pool.map(make_train_qual_res, graph_update_func_arg)
+            else:
+                for x in graph_update_func_arg:
+                    make_train_qual_res(x)
             graph_update_func_arg = []
 
             data_layer_train.reinit(train_img_names, is_training=True,
@@ -321,7 +310,6 @@ def run_train(args):
             next_update_end = next_update_start+required_num_iters_for_train_set_update-1
 
         if (iter+1) % cfg.TEST_ITERS == 0:
-
             # cnn module related
             all_cnn_labels = np.zeros((0,))
             all_cnn_preds = np.zeros((0,))

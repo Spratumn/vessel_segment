@@ -26,12 +26,12 @@ DATASET_CONFIGS = {
 ##### Training (general) #####
 DISPLAY = 10
 TEST_ITERS = 100
-SNAPSHOT_ITERS = 500
+SNAPSHOT_ITERS = 100
 
 
 WEIGHT_DECAY_RATE = 0.0005
 BATCH_SIZE = 8 # for CNN
-GRAPH_BATCH_SIZE = 4 # for VGN
+GRAPH_BATCH_SIZE = 1 # for VGN
 
 ##### Training (augmentation) #####
 
