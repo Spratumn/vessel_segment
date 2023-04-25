@@ -68,3 +68,10 @@ python train_CNN.py --dataset Artery
 ## 6.VGN 测试
 
 运行test_CNN.py（按照需要设置合适的参数）, 生成``*_prob.png``；
+
+
+## 7. 训练和测试结果
+
+[cnn](./doc/cnn.md)
+
+[vgn](./doc/vgn.md)
