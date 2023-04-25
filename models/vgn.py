@@ -11,28 +11,31 @@ from .module import DRIU, LargeDRIU, new_conv_layer, new_deconv_layer
 # torch.autograd.set_detect_anomaly(True)
 
 class VesselSegmVGN():
-    def __init__(self, params, width, height):
+    def __init__(self, params, width, height, is_train=True):
         self.params = params
         self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
         self.cnn_model = self.build_cnn(params.cnn_model).to(self.device)
-        self.gat_model = GAT(params, width, height, norm=False).to(self.device)
-        self.infer_model = Infer(params).to(self.device)
+        self.gat_model = GAT(params, width, height, norm=False, is_train=is_train).to(self.device)
+        self.infer_model = Infer(params, is_train=is_train).to(self.device)
+
+
         self.cnn_loss_function = nn.BCEWithLogitsLoss(reduce=False)
         self.gnn_loss_function = nn.BCEWithLogitsLoss(reduce=False)
         self.infer_loss_function = nn.BCEWithLogitsLoss(reduce=False)
+        if is_train:
+            self.opt_params = {
+                'params': filter(lambda p: p.requires_grad,
+                                itertools.chain(self.cnn_model.parameters(),
+                                                self.gat_model.parameters(),
+                                                self.infer_model.parameters())),
+                'lr': params.lr if 'lr' in params else 1e-02,
+                'weight_decay': cfg.WEIGHT_DECAY_RATE
+                }
 
-        self.opt_params = {
-            'params': filter(lambda p: p.requires_grad,
-                             itertools.chain(self.cnn_model.parameters(),
-                                             self.gat_model.parameters(),
-                                             self.infer_model.parameters())),
-            'lr': params.lr if 'lr' in params else 1e-02,
-            'weight_decay': cfg.WEIGHT_DECAY_RATE
-            }
-        self.optimizer = opt.Adam(**self.opt_params)
-        self.lr_scheduler = opt.lr_scheduler.MultiStepLR(self.optimizer,
-                                                         milestones=params.lr_steps, gamma=params.lr_gamma)
+            self.optimizer = opt.Adam(**self.opt_params)
+            self.lr_scheduler = opt.lr_scheduler.MultiStepLR(self.optimizer,
+                                                            milestones=params.lr_steps, gamma=params.lr_gamma)
 
     def build_cnn(self, cnn_model='driu'):
         if cnn_model == 'driu':
@@ -105,7 +108,7 @@ class VesselSegmVGN():
                 node_logits, gnn_final_feats, node_byxs, node_labels = self.gat_model(node_byxs,
                                                                                       adj,
                                                                                       conv_feats,
-                                                                                      labels)
+                                                                                      labels, is_train=False)
                 post_cnn_img_fg_prob, post_cnn_img_output = self.infer_model(imgs, cnn_feat, gnn_final_feats,
                                                                              is_lr_flipped,
                                                                              is_ud_flipped, is_train=False)
@@ -201,10 +204,10 @@ class VesselSegmVGN():
         reshaped_pixel_weights /= torch.mean(reshaped_pixel_weights)
         post_cnn_loss = torch.mean(torch.mul(torch.mul(reshaped_pixel_weights, weight_per_label), post_cnn_cross_entropies))
         loss = post_cnn_loss
-        if self.params.cnn_loss_on:
+        if 'cnn_loss_on' in self.params and self.params.cnn_loss_on:
             loss += cnn_loss
 
-        if self.params.gnn_loss_on:
+        if 'gnn_loss_on' in self.params and self.params.gnn_loss_on:
             loss += gnn_loss * self.params.gnn_loss_weight
         if is_train:
             loss.backward()
@@ -234,26 +237,27 @@ class VesselSegmVGN():
 
 
 class GAT(nn.Module):
-    def __init__(self, params, width, height, norm=False):
+    def __init__(self, params, width, height, norm=False, is_train=True):
         super().__init__()
         self.params = params
         num_node = (width // params.win_size) * (height // params.win_size)
-        self.build_model(int(num_node), norm)
+        self.build_model(int(num_node), norm, is_train)
 
-    def build_model(self, num_node, norm=False):
+    def build_model(self, num_node, norm=False, is_train=True):
+        gat_use_residual = False if 'gat_use_residual' not in self.params else self.params.gat_use_residual
         self.sp_attn_head_layer_1 = SPAttnHead(64, self.params.gat_hid_units[0],
                                                act=nn.ELU(), norm=norm,
-                                               feat_dropout=self.params.gnn_feat_dropout_prob,
-                                               att_dropout=self.params.gnn_att_dropout_prob,
-                                               residual=self.params.gat_use_residual, num_node=num_node)
+                                               feat_dropout=self.params.gnn_feat_dropout_prob if is_train else 0,
+                                               att_dropout=self.params.gnn_att_dropout_prob if is_train else 0,
+                                               residual=gat_use_residual, num_node=num_node)
 
         self.sp_attn_head_layer_out = SPAttnHead(self.params.gat_hid_units[0] * self.params.gat_n_heads[0], 1,
                                                 norm=norm,
-                                                feat_dropout=self.params.gnn_feat_dropout_prob,
-                                                att_dropout=self.params.gnn_att_dropout_prob,
+                                                feat_dropout=self.params.gnn_feat_dropout_prob if is_train else 0,
+                                                att_dropout=self.params.gnn_att_dropout_prob if is_train else 0,
                                                 residual=False, num_node=num_node)
 
-    def forward(self, node_byxs, adj, conv_feats, labels):
+    def forward(self, node_byxs, adj, conv_feats, labels, is_train=True):
         node_feats = gather_nd(conv_feats.permute([0, 2, 3, 1]), node_byxs)
         node_labels = torch.reshape(gather_nd(labels, node_byxs), [-1]).float()
         node_feats_resh = node_feats.unsqueeze(0).permute([0, 2, 1])
@@ -261,11 +265,11 @@ class GAT(nn.Module):
         adj = torch.sparse_coo_tensor(indices=torch.tensor(adj[0]).t(), values=adj[1], size=adj[2], device=node_feats.device)
         adj = adj.to_dense()
         for _ in range(self.params.gat_n_heads[0]):
-            attns.append(self.sp_attn_head_layer_1(node_feats_resh, adj))
+            attns.append(self.sp_attn_head_layer_1(node_feats_resh, adj, is_train))
         h_1 = torch.cat(attns, axis=1)
         out = self.sp_attn_head_layer_out(h_1, adj)
         for _ in range(self.params.gat_n_heads[-1] - 1):
-            out =  out + self.sp_attn_head_layer_out(h_1, adj)
+            out =  out + self.sp_attn_head_layer_out(h_1, adj, is_train)
 
         node_logits = out / self.params.gat_n_heads[-1]
         node_logits = torch.squeeze(node_logits)
@@ -296,8 +300,8 @@ class SPAttnHead(nn.Module):
         self.vars_bias = nn.Parameter(torch.zeros((1, num_node, self.out_channel)), requires_grad=True)
         self.act = act
 
-    def forward(self, x, adj):
-        if hasattr(self, 'feat_dropout'): x = self.feat_dropout(x)
+    def forward(self, x, adj, is_train=True):
+        if is_train and hasattr(self, 'feat_dropout'): x = self.feat_dropout(x)
         fts = self.fts_layer(x)
         if hasattr(self, 'fts_norm'): fts = self.fts_norm(fts)
         num_nodes = adj.size()[:1]
@@ -306,15 +310,15 @@ class SPAttnHead(nn.Module):
         # make shape match
 
         coefs = sparse_softmax2d(self.lrelu(adj * f1.view(-1, 1) + adj * f2.view(-1, 1).permute([1, 0])))
-        if hasattr(self, 'att_dropout'): coefs = self.att_dropout(coefs)
-        if hasattr(self, 'feat_dropout'): fts = self.feat_dropout(fts)
+        if is_train and hasattr(self, 'att_dropout'): coefs = self.att_dropout(coefs)
+        if is_train and hasattr(self, 'feat_dropout'): fts = self.feat_dropout(fts)
 
         fts = torch.squeeze(fts)
         if len(fts.shape) == 1: fts = fts.unsqueeze(0)
         vals = torch.matmul(coefs, fts.permute([1, 0]))
         vals = torch.reshape(vals, [1, *num_nodes[:], self.out_channel])
         ret = (vals + self.vars_bias).permute([0, 2, 1])
-        if hasattr(self, 'residual_layer'):
+        if is_train and hasattr(self, 'residual_layer'):
             if x.shape[1] != ret.shape[1]:
                 ret = ret + self.residual_layer(x)
             else:
@@ -337,21 +341,21 @@ def gather_nd(params, indices):
 
 
 class Infer(nn.Module):
-    def __init__(self, params):
+    def __init__(self, params, is_train=True):
         super().__init__()
         self.params = params
         temp_num_chs = self.params.gat_n_heads[-2] * self.params.gat_hid_units[-1]
         self.post_cnn_conv_layer = new_conv_layer(temp_num_chs, 32, 1, 1, padding=0, use_relu=True)
         self.upsampled_layer = new_deconv_layer(32, 16, 4, stride=2)
-        if params.use_enc_layer:
+        if 'use_enc_layer' in params and params.use_enc_layer:
             self.cur_cnn_layer = new_conv_layer(16, 16, 1, 1, padding=0, use_relu=True)
 
         self.output_layer_in = new_conv_layer(32, 32, self.params.infer_module_kernel_size, 1, use_relu=True)
         self.output_layer_out = new_conv_layer(32, 1, self.params.infer_module_kernel_size, 1, use_relu=True)
-        self.infer_dropopt = nn.Dropout(p=params.infer_module_dropout_prob)
+        self.infer_dropopt = nn.Dropout(p=params.infer_module_dropout_prob if is_train else 1)
 
     def forward(self, imgs, cnn_feat, gnn_final_feats,
-                is_lr_flipped, is_ud_flipped, is_train=False):
+                is_lr_flipped, is_ud_flipped, is_train=True):
         y_len = imgs.shape[-2] // self.params.win_size
         x_len = imgs.shape[-1] // self.params.win_size
 

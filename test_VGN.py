@@ -10,6 +10,7 @@ from tqdm import tqdm
 import config as cfg
 from models.vgn import VesselSegmVGN
 import util
+from config import DATASET_CONFIGS
 
 def parse_args():
     """
@@ -18,12 +19,21 @@ def parse_args():
     parser = argparse.ArgumentParser(description='test')
     parser.add_argument('--dataset', default='Artery', help='Dataset to use: Can be Artery or HRF', type=str)
     parser.add_argument('--cnn_model', default='driu', help='CNN model to use', type=str)
+    parser.add_argument('--win_size', default=8, help='Window size for srns', type=int) # for srns # [4,8,16]
+    parser.add_argument('--edge_type', default='srns_geo_dist_binary', help='Graph edge type: Can be srns_geo_dist_binary or srns_geo_dist_weighted', type=str)
+    parser.add_argument('--edge_geo_dist_thresh', default=10, help='Threshold for geodesic distance', type=float)
+    # gat #
+    parser.add_argument('--gat_n_heads', default=[4,4], help='Numbers of heads in each layer', type=list)
+    parser.add_argument('--gat_hid_units', default=[16], help='Numbers of hidden units per each attention head in each layer', type=list)
+    # infer
+    parser.add_argument('--infer_module_kernel_size', default=3, help='Conv. kernel size for the inference module', type=int)
+    parser.add_argument('--infer_module_grad_weight', default=1., help='Relative weight of the grad. on the inference module', type=float)
 
     return parser.parse_args()
 
 
 def draw_cnn_results(args):
-    result_dir = f'log/{args.dataset}'
+    result_dir = f'log/{args.dataset}/VGN'
     log_path = os.path.join(result_dir, 'log.txt')
     with open(log_path, 'r') as f:
         lines = f.readlines()
@@ -98,9 +108,12 @@ def draw_cnn_results(args):
 
 
 def get_prob(args, ds_filename='test.txt', modelpath='', res_save_dir=''):
-    network = VesselSegmVGN(args)
+    dataset_cfg = DATASET_CONFIGS[args.dataset]
+    network = VesselSegmVGN(args, dataset_cfg.len_x, dataset_cfg.len_y, is_train=False)
     network.load_model(modelpath)
-    data_layer = util.GraphDataLayer(args.dataset, ds_filename, is_training=False)
+    data_layer = util.GraphDataLayer(args.dataset, ds_filename, is_training=False,
+                                     win_size=args.win_size, edge_type=args.edge_type,
+                                     edge_geo_dist_thresh=args.edge_geo_dist_thresh)
 
     # cnn module related
     all_cnn_labels = np.zeros((0,))
@@ -118,7 +131,7 @@ def get_prob(args, ds_filename='test.txt', modelpath='', res_save_dir=''):
         img_list, blobs_test = data_layer.forward()
         imgs = blobs_test['img']
         labels = blobs_test['label']
-        if args.use_fov_mask:
+        if 'use_fov_mask' in args and args.use_fov_mask:
             fov_masks = blobs_test['fov']
         else:
             fov_masks = np.ones(labels.shape, dtype=labels.dtype)
@@ -181,6 +194,7 @@ def get_prob(args, ds_filename='test.txt', modelpath='', res_save_dir=''):
             cur_save_path = os.path.join(res_save_dir, cur_img_name + '_prob_cnn.png')
             skimage.io.imsave(cur_save_path, cur_map)
             cur_map = (cur_infer_module_fg_prob_map*255).astype(int)
+            # cur_map[cur_map==127] = 0
             cur_save_path = os.path.join(res_save_dir, cur_img_name + '_prob_infer_module.png')
             skimage.io.imsave(cur_save_path, cur_map)
 
@@ -213,17 +227,17 @@ def get_prob(args, ds_filename='test.txt', modelpath='', res_save_dir=''):
 if __name__ == '__main__':
     args = parse_args()
     # 绘制训练相关曲线图
-    draw_cnn_results(args)
+    # draw_cnn_results(args)
 
     # 生成prob图片
     # 训练集
     get_prob(args, ds_filename='train.txt',
-             modelpath='log/Artery/VGN/weights/iter_5000.pth',
-             res_save_dir='datasets/Artery/graph')
+             modelpath='log/Artery/VGN/weights/iter_2000.pth',
+             res_save_dir='log/Artery/VGN/graph')
     # 测试集
-    # get_prob(args, ds_filename='test.txt',
-    #          modelpath='log/Artery/CNN/weights/iter_5000.pth',
-    #          res_save_dir='datasets/Artery/graph')
+    get_prob(args, ds_filename='test.txt',
+             modelpath='log/Artery/VGN/weights/iter_2000.pth',
+             res_save_dir='log/Artery/VGN/graph')
 
 
 

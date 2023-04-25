@@ -1,7 +1,6 @@
 import numpy as np
 import os
 import argparse
-import cv2
 import skimage.io
 import networkx as nx
 import pickle as pkl
@@ -25,11 +24,9 @@ def parse_args():
     parser.add_argument('--use_multiprocessing', default=True, help='Whether to use the python multiprocessing module', type=bool)
     parser.add_argument('--multiprocessing_num_proc', default=36, help='Number of CPU processes to use', type=int)
     parser.add_argument('--win_size', default=8, help='Window size for srns', type=int) # for srns # [4,8,16]
-    parser.add_argument('--edge_type', default='srns_geo_dist_binary',
-                        help='Graph edge type: Can be srns_geo_dist_binary or srns_geo_dist_weighted', type=str)
-    parser.add_argument('--edge_geo_dist_thresh', default=10, help='Threshold for geodesic distance', type=float) # [10,20,40]
-    parser.add_argument('--pretrained_model', default=None,
-                        help='Path for a pretrained model(.ckpt)', type=str)
+    parser.add_argument('--edge_type', default='srns_geo_dist_binary', help='Graph edge type: Can be srns_geo_dist_binary or srns_geo_dist_weighted', type=str)
+    parser.add_argument('--edge_geo_dist_thresh', default=10, help='Threshold for geodesic distance', type=float)
+    parser.add_argument('--pretrained_model', default=None, help='Path for a pretrained model(.ckpt)', type=str)
     parser.add_argument('--save_root', default='log', help='root path to save trained models and test results', type=str)
 
     ### cnn module related ###
@@ -42,21 +39,16 @@ def parse_args():
     parser.add_argument('--gnn_feat_dropout_prob', default=0.5, help='Dropout prob. for feat. in gnn layers', type=float)
     parser.add_argument('--gnn_att_dropout_prob', default=0.5, help='Dropout prob. for att. in gnn layers', type=float)
     # gat #
-    parser.add_argument('--gat_n_heads', default=[4,4], help='Numbers of heads in each layer', type=list) # [4,1]
+    parser.add_argument('--gat_n_heads', default=[4,4], help='Numbers of heads in each layer', type=list)
     parser.add_argument('--gat_hid_units', default=[16], help='Numbers of hidden units per each attention head in each layer', type=list)
-    parser.add_argument('--gat_use_residual', action='store_true', default=False, help='Whether to use residual learning in GAT')
+    parser.add_argument('--gat_use_residual', action='store_true', help='Whether to use residual learning in GAT')
 
     ### inference module related ###
-    parser.add_argument('--use_enc_layer', action='store_true', default=False,
-                        help='Whether to use additional conv. layers in the inference module')
-    parser.add_argument('--infer_module_loss_masking_thresh', default=0.05,
-                        help='Threshold for loss masking', type=float)
-    parser.add_argument('--infer_module_kernel_size', default=3,
-                        help='Conv. kernel size for the inference module', type=int)
-    parser.add_argument('--infer_module_grad_weight', default=1.,
-                        help='Relative weight of the grad. on the inference module', type=float)
-    parser.add_argument('--infer_module_dropout_prob', default=0.1,
-                        help='Dropout prob. for layers in the inference module', type=float)
+    parser.add_argument('--use_enc_layer', action='store_true', help='Whether to use additional conv. layers in the inference module')
+    parser.add_argument('--infer_module_loss_masking_thresh', default=0.05, help='Threshold for loss masking', type=float)
+    parser.add_argument('--infer_module_kernel_size', default=3, help='Conv. kernel size for the inference module', type=int)
+    parser.add_argument('--infer_module_grad_weight', default=1., help='Relative weight of the grad. on the inference module', type=float)
+    parser.add_argument('--infer_module_dropout_prob', default=0.1, help='Dropout prob. for layers in the inference module', type=float)
 
     ### training (declared but not used) ###
     parser.add_argument('--lr', default=1e-04, help='Learning rate to use: Can be any floating point number', type=float)
@@ -64,7 +56,7 @@ def parse_args():
     parser.add_argument('--lr_gamma', default=0.5, help='lr decay rate during training', type=float)
     parser.add_argument('--max_iters', default=5000, help='Maximum number of iterations', type=int)
     parser.add_argument('--use_graph_update', default=True, help='Whether to update graphs during training', type=bool)
-    parser.add_argument('--graph_update_period', default=1500, help='Graph update period', type=int)
+    parser.add_argument('--graph_update_period', default=3000, help='Graph update period', type=int)
     parser.add_argument('--use_fov_mask', default=False, help='Whether to use fov masks', type=bool)
 
     args = parser.parse_args()
@@ -271,7 +263,7 @@ def run_train(args):
 
         if (iter+1) % cfg.SNAPSHOT_ITERS == 0:
             last_snapshot_iter = iter
-            filename = os.path.join(model_save_dir, ('iter_{:d}'.format(iter+1) + '.pth'))
+            filename = os.path.join(model_save_dir, ('iter_{:d}'.format(iter + 1) + '.pth'))
             network.save_model(filename)
             print('Wrote snapshot to: {:s}'.format(filename))
 
@@ -399,6 +391,7 @@ def run_train(args):
                     cur_save_path = os.path.join(res_save_dir, cur_img_name + '_prob_cnn.png')
                     skimage.io.imsave(cur_save_path, cur_map)
                     cur_map = (cur_infer_module_fg_prob_map*255).astype(int)
+                    # cur_map[cur_map==127] = 0
                     cur_save_path = os.path.join(res_save_dir, cur_img_name + '_prob_infer_module.png')
                     skimage.io.imsave(cur_save_path, cur_map)
 
@@ -482,6 +475,5 @@ def run_train(args):
 
 
 if __name__ == '__main__':
-
     args = parse_args()
     run_train(args)

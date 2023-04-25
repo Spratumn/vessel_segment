@@ -12,6 +12,7 @@
 ![image](../datasets/Artery/all/10471.bmp) ![label](../datasets/Artery/all/10471_all.bmp)
 
 #### prob in CNN and VGN
-![](../log/Artery/CNN/graph/10471_prob.png)
 
-![](../log/Artery/VGN/graph/10471_prob_cnn.png) ![](../log/Artery/VGN/graph/10471_prob_infer_module.png)
+![cnn](../log/Artery/CNN/graph/10471_prob.png)
+
+![cnn](../log/Artery/VGN/graph/10471_prob_cnn.png) ![vgn](../log/Artery/VGN/graph/10471_prob_infer_module.png)

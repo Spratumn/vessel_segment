@@ -92,7 +92,7 @@ class DataLayer(object):
 class GraphDataLayer(object):
     def __init__(self, dataset, ds_filename, is_training,
                  edge_type='srns_geo_dist_binary',
-                 win_size=8, edge_geo_dist_thresh=20):
+                 win_size=8, edge_geo_dist_thresh=10):
         """Set the db to be used by this layer."""
         self.dataset = dataset
         dataset_root_dir = f'datasets/{dataset}'
@@ -155,7 +155,7 @@ class GraphDataLayer(object):
 
     def reinit(self, db, is_training,
                edge_type='srns_geo_dist_binary',
-               win_size=8, edge_geo_dist_thresh=20):
+               win_size=8, edge_geo_dist_thresh=10):
         """Reinitialize with new arguments."""
         self.imagepathes = db
         self._is_training = is_training
@@ -171,7 +171,7 @@ class GraphDataLayer(object):
 def get_minibatch(imagepathes, dataset, is_training,
                   is_about_graph=False,
                   edge_type='srns_geo_dist_binary',
-                  win_size=8, edge_geo_dist_thresh=20,
+                  win_size=8, edge_geo_dist_thresh=10,
                   use_padding=False):
     """Given a minibatch_imagepathes, construct a blob."""
 
@@ -253,7 +253,7 @@ def _get_image_fov_blob(imagepathes, dataset, is_training, use_padding=False):
 
 
 def _get_graph_fov_blob(imagepathes, dataset, is_training, edge_type='srns_geo_dist_binary',
-                        win_size=8, edge_geo_dist_thresh=20):
+                        win_size=8, edge_geo_dist_thresh=10):
     """Builds an input blob from the graphs in the minibatch_imagepathes."""
     dataset_config = DATASET_CONFIGS[dataset]
     num_graphs = len(imagepathes)
@@ -328,7 +328,7 @@ def _get_graph_fov_blob(imagepathes, dataset, is_training, edge_type='srns_geo_d
         if 'srns' not in edge_type:
             raise NotImplementedError
         else:
-            win_size_str = '%.2d_%.2d'%(win_size,edge_geo_dist_thresh)
+            win_size_str = '%.2d_%.2d'%(win_size, edge_geo_dist_thresh)
             graph_path = os.path.join(f'datasets/{dataset}', 'graph', imagename + '_' + win_size_str + '.graph_res')
             graph = nx.read_gpickle(graph_path)
 
