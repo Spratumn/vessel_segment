@@ -20,11 +20,8 @@ pip install -r requirements.txt
 
 例如：
 ```sh
-python -m make_graph.make_graph --dataset HRF --win_size 8 --source_type gt --multiprocess 16
-
-# or
-
 python -m make_graph.make_graph --dataset Artery --win_size 8 --source_type gt --multiprocess 16
+
 ```
 
 
@@ -36,7 +33,7 @@ python -m make_graph.make_graph --dataset Artery --win_size 8 --source_type gt -
 
 例如：
 ```sh
-python train_CNN.py --dataset HRF
+python train_CNN.py --dataset Artery
 ```
 
 
@@ -57,15 +54,15 @@ python train_CNN.py --dataset HRF
 例如：
 ```sh
 # 加载CNN训练权重
-python train_CNN.py --dataset HRF --pretrained_model log/${dataset_name}/CNN/weights/${weights_name}.pth
+python train_CNN.py --dataset Artery --pretrained_model log/${dataset_name}/CNN/weights/${weights_name}.pth
 
 # or
 # 加载imagenet权重
-python train_CNN.py --dataset HRF --pretrained_model pretrained_model/VGG_imagenet.npy
+python train_CNN.py --dataset Artery --pretrained_model pretrained_model/VGG_imagenet.npy
 
 # or
 # 重新训练
-python train_CNN.py --dataset HRF
+python train_CNN.py --dataset Artery
 ```
 
 ## 6.VGN 测试

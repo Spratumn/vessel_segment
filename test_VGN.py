@@ -135,12 +135,12 @@ def get_prob(args, ds_filename='test.txt', modelpath='', res_save_dir=''):
 
         adj_norm = util.preprocess_graph_gat(adj)
         result_dict_test = network.run_batch(imgs, labels, fov_masks,
-                                                node_byxs=node_byxs,
-                                                adj=adj_norm,
-                                                pixel_weights=pixel_weights,
-                                                is_lr_flipped=False,
-                                                is_ud_flipped=False,
-                                                is_train=False)
+                                            node_byxs=node_byxs,
+                                            adj=adj_norm,
+                                            pixel_weights=pixel_weights,
+                                            is_lr_flipped=False,
+                                            is_ud_flipped=False,
+                                            is_train=False)
 
         cnn_fg_prob_mat, \
         gnn_labels, gnn_prob_vec, \
