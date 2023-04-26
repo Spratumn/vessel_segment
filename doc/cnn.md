@@ -7,9 +7,6 @@
 
 ## results on testset
 
-#### image and label
+![image](../datasets/Artery/all/10471.bmp)
 
-![image](../datasets/Artery/all/10471.bmp) ![label](../datasets/Artery/all/10471_all.bmp)
-
-#### output and prob
-![](../log/Artery/CNN/graph/10471_output.png) ![](../log/Artery/CNN/graph/10471_prob.png)
+![prob](../log/Artery/CNN/graph/10471_prob.png)

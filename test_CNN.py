@@ -88,13 +88,13 @@ def get_prob(args, ds_filename='test.txt', modelpath='', res_save_dir=''):
             temp_name = os.path.basename(cur_test_img_path)
 
             cur_reshaped_fg_prob_map = (reshaped_fg_prob_map[img_idx,:,:] * 255).astype(int)
-            cur_reshaped_output = reshaped_output[img_idx,:,:].astype(int) * 255
+            # cur_reshaped_output = reshaped_output[img_idx,:,:].astype(int) * 255
 
             cur_fg_prob_save_path = os.path.join(res_save_dir, temp_name + '_prob.png')
-            cur_output_save_path = os.path.join(res_save_dir, temp_name + '_output.png')
+            # cur_output_save_path = os.path.join(res_save_dir, temp_name + '_output.png')
 
             cv2.imwrite(cur_fg_prob_save_path, cur_reshaped_fg_prob_map)
-            cv2.imwrite(cur_output_save_path, cur_reshaped_output)
+            # cv2.imwrite(cur_output_save_path, cur_reshaped_output)
 
     auc_test, ap_test = util.get_auc_ap_score(all_labels, all_preds)
     all_labels_bin = np.copy(all_labels).astype(np.bool)
@@ -113,9 +113,9 @@ if __name__ == '__main__':
 
     # 生成prob图片
     # 训练集
-    get_prob(args, ds_filename='train.txt',
-             modelpath='log/Artery/CNN/weights/iter_5000.pth',
-             res_save_dir='datasets/Artery/graph')
+    # get_prob(args, ds_filename='train.txt',
+    #          modelpath='log/Artery/CNN/weights/iter_5000.pth',
+    #          res_save_dir='datasets/Artery/graph')
     # 测试集
     get_prob(args, ds_filename='test.txt',
              modelpath='log/Artery/CNN/weights/iter_5000.pth',

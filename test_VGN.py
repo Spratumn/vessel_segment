@@ -1,7 +1,6 @@
 import argparse
 import cv2
 import os
-import skimage.io
 import networkx as nx
 import matplotlib.pyplot as plt
 import numpy as np
@@ -32,12 +31,12 @@ def parse_args():
     return parser.parse_args()
 
 
-def draw_cnn_results(args):
+def draw_vgn_results(args):
     result_dir = f'log/{args.dataset}/VGN'
     log_path = os.path.join(result_dir, 'log.txt')
     with open(log_path, 'r') as f:
         lines = f.readlines()
-    logs = [l.rstrip('\n') for l in lines[1:]]
+    logs = [l.rstrip('\n') for l in lines]
     iter_idxes = []
     train_losses = []
     train_cnn_losses = []
@@ -192,11 +191,11 @@ def get_prob(args, ds_filename='test.txt', modelpath='', res_save_dir=''):
 
             cur_map = (cur_cnn_fg_prob_map*255).astype(int)
             cur_save_path = os.path.join(res_save_dir, cur_img_name + '_prob_cnn.png')
-            skimage.io.imsave(cur_save_path, cur_map)
+            cv2.imwrite(cur_save_path, cur_map)
             cur_map = (cur_infer_module_fg_prob_map*255).astype(int)
             # cur_map[cur_map==127] = 0
             cur_save_path = os.path.join(res_save_dir, cur_img_name + '_prob_infer_module.png')
-            skimage.io.imsave(cur_save_path, cur_map)
+            cv2.imwrite(cur_save_path, cur_map)
 
     cnn_auc_test, cnn_ap_test = util.get_auc_ap_score(all_cnn_labels, all_cnn_preds)
     all_cnn_labels_bin = np.copy(all_cnn_labels).astype(np.bool)
@@ -221,22 +220,19 @@ def get_prob(args, ds_filename='test.txt', modelpath='', res_save_dir=''):
 
 
 
-
-
-
 if __name__ == '__main__':
     args = parse_args()
     # 绘制训练相关曲线图
-    # draw_cnn_results(args)
+    draw_vgn_results(args)
 
     # 生成prob图片
     # 训练集
-    get_prob(args, ds_filename='train.txt',
-             modelpath='log/Artery/VGN/weights/iter_2000.pth',
-             res_save_dir='log/Artery/VGN/graph')
+    # get_prob(args, ds_filename='train.txt',
+    #          modelpath='log/Artery/VGN/weights/iter_2900.pth',
+    #          res_save_dir='log/Artery/VGN/graph')
     # 测试集
     get_prob(args, ds_filename='test.txt',
-             modelpath='log/Artery/VGN/weights/iter_2000.pth',
+             modelpath='log/Artery/VGN/weights/iter_2900.pth',
              res_save_dir='log/Artery/VGN/graph')
 
 

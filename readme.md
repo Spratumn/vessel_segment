@@ -1,3 +1,11 @@
+- Base: https://github.com/syshin1014/VGN
+- 原仓库环境：python2.7+tensorflow1.12
+
+## 0.主要内容
+1. 以 python3.6+pytorch1.8 为环境复现整个训练和测试流程；
+2. 复现过程中对一些在pytorch框架中没有的操作进行了对应的函数封装；
+3. 增加了一些有助于训练收敛的可选操作，如BN.
+4. 支持训练中断后继续训练。
 ## 1.环境准备
 
 ```sh
@@ -61,9 +69,12 @@ python train_CNN.py --dataset Artery --pretrained_model log/${dataset_name}/CNN/
 python train_CNN.py --dataset Artery --pretrained_model pretrained_model/VGG_imagenet.npy
 
 # or
-# 重新训练
+# 不使用任何预训练权重，从头开始训练
 python train_CNN.py --dataset Artery
 ```
+注1：--pretrained_model 也可以用于加载VGN训练的权重（即上次训练未完成，本次在上次的基础上继续训练）
+
+注2：--lr 尽量避免使用过大的学习率，可能在训练中出现梯度爆炸导致训练失败，代码中使用了``assert not torch.any(torch.isnan(tensor))``相关操作进行了检查，相应代码行报错即与学习率设置不合适有关。
 
 ## 6.VGN 测试
 

@@ -1,7 +1,5 @@
 """ Common util file
 """
-
-
 import numpy as np
 import numpy.random as npr
 import os
@@ -284,7 +282,6 @@ def _get_graph_fov_blob(imagepathes, dataset, is_training, edge_type='srns_geo_d
     # to apply the same aug in a mini-batch #
 
     for i in range(num_graphs):
-
         # load images
         im = cv2.cvtColor(cv2.imread(imagepathes[i] + dataset_config.image_suffix), cv2.COLOR_BGR2RGB)
         label = cv2.imread(imagepathes[i] + dataset_config.label_suffix, 0)
@@ -410,16 +407,11 @@ def _get_graph_fov_blob(imagepathes, dataset, is_training, edge_type='srns_geo_d
 
 def prep_im_fov_for_blob(im, label, fov, pixel_mean, is_training):
     """Preprocess images for use in a blob."""
-
     im = im.astype(np.float32, copy=False)/255.
     label = label.astype(np.float32, copy=False)/255.
     fov = fov.astype(np.float32, copy=False)/255.
 
-    #skimage.io.imsave('img.bmp', (im*255).astype(int))
-    #skimage.io.imsave('label.bmp', (label.reshape(label.shape[0],label.shape[1])*255).astype(int))
-
     vec_aug_on = np.zeros((7,), dtype=np.bool)
-
     if is_training:
         if USE_LR_FLIPPED and npr.random_sample() >= 0.5:
             vec_aug_on[0] = True
@@ -476,8 +468,6 @@ def prep_im_fov_for_blob(im, label, fov, pixel_mean, is_training):
             im = (im-mm)*np.random.uniform(CONTRAST_ADJUSTMENT_LOWER_FACTOR,CONTRAST_ADJUSTMENT_UPPER_FACTOR) + mm
             im = np.clip(im, 0, 1)
 
-    #skimage.io.imsave('img_1.bmp', (im*255).astype(int))
-
     # original
     im -= np.array(pixel_mean)/255.
     im = im*255.
@@ -490,14 +480,11 @@ def prep_im_fov_for_blob(im, label, fov, pixel_mean, is_training):
     label = label>=0.5
     fov = fov>=0.5
 
-    #skimage.io.imsave('label_1.bmp', (label.reshape(label.shape[0],label.shape[1])*255).astype(int))
-
     return im, label, fov, vec_aug_on
 
 
 def prep_im_label_fov_probmap_for_blob(im, label, fov, probmap, node_idx_map, pixel_mean, is_training, win_size):
     """Preprocess images for use in a blob."""
-
     im = im.astype(np.float32, copy=False)/255.
     label = label.astype(np.float32, copy=False)/255.
     fov = fov.astype(np.float32, copy=False)/255.
@@ -728,10 +715,8 @@ def visualize_graph(im, graph, show_graph=False, save_graph=True,
 
 
 def get_auc_ap_score(labels, preds):
-
     auc_score = roc_auc_score(labels, preds)
     ap_score = average_precision_score(labels, preds)
-
     return auc_score, ap_score
 
 

@@ -1,7 +1,7 @@
 import numpy as np
 import os
+import cv2
 import argparse
-import skimage.io
 import networkx as nx
 import pickle as pkl
 import multiprocessing
@@ -26,7 +26,7 @@ def parse_args():
     parser.add_argument('--win_size', default=8, help='Window size for srns', type=int) # for srns # [4,8,16]
     parser.add_argument('--edge_type', default='srns_geo_dist_binary', help='Graph edge type: Can be srns_geo_dist_binary or srns_geo_dist_weighted', type=str)
     parser.add_argument('--edge_geo_dist_thresh', default=10, help='Threshold for geodesic distance', type=float)
-    parser.add_argument('--pretrained_model', default=None, help='Path for a pretrained model(.ckpt)', type=str)
+    parser.add_argument('--pretrained_model', default=None, help='Path for a pretrained model(.pth or .npy)', type=str)
     parser.add_argument('--save_root', default='log', help='root path to save trained models and test results', type=str)
 
     ### cnn module related ###
@@ -53,7 +53,7 @@ def parse_args():
     ### training (declared but not used) ###
     parser.add_argument('--lr', default=1e-04, help='Learning rate to use: Can be any floating point number', type=float)
     parser.add_argument('--lr_steps', default=[1000, 2000, 3000, 4000], help='When to decrease the lr during training', type=float)
-    parser.add_argument('--lr_gamma', default=0.5, help='lr decay rate during training', type=float)
+    parser.add_argument('--lr_gamma', default=0.1, help='lr decay rate during training', type=float)
     parser.add_argument('--max_iters', default=5000, help='Maximum number of iterations', type=int)
     parser.add_argument('--use_graph_update', default=True, help='Whether to update graphs during training', type=bool)
     parser.add_argument('--graph_update_period', default=3000, help='Graph update period', type=int)
@@ -73,7 +73,7 @@ def make_train_qual_res(args_tuple):
     print('Regenerating a graph for ' + cur_filename + '...')
     temp = (fg_prob_map*255).astype(int)
     cur_save_path = os.path.join(temp_graph_save_path, cur_filename+'_prob.png')
-    skimage.io.imsave(cur_save_path, temp)
+    cv2.imwrite(cur_save_path, temp)
 
     cur_res_graph_savepath = os.path.join(temp_graph_save_path, cur_filename+'_'+win_size_str+'.graph_res')
 
@@ -158,17 +158,21 @@ def run_train(args):
     image_height, image_width = blobs_train['img'].shape[2:]
     network = VesselSegmVGN(args, image_width, image_height)
 
+    start_iter = 0
     if args.pretrained_model is not None:
         print("Loading model...")
         model_suffix = os.path.basename(args.pretrained_model)
-        if model_suffix.endswith('pth'):
-            network.load_model(args.pretrained_model)
-        elif model_suffix.endswith('npy'):
+        if model_suffix.endswith('.pth'):
+            if network.load_model(args.pretrained_model):
+                start_iter = int(model_suffix.split('_')[1].split('.pth')[0])
+        elif model_suffix.endswith('.npy'):
             network.load_npy(args.pretrained_model)
+    if start_iter == 0:
+        f_log = open(os.path.join(log_dir,'log.txt'), 'w')
+    else:
+        f_log = open(os.path.join(log_dir,'log.txt'), 'a')
+    print(f'Train from iter={start_iter}')
 
-    f_log = open(os.path.join(log_dir,'log.txt'), 'w')
-    f_log.write(str(args)+'\n')
-    f_log.flush()
     last_snapshot_iter = -1
     timer = util.Timer()
 
@@ -193,7 +197,8 @@ def run_train(args):
     graph_update_func_arg = []
     test_loss_logs = []
     print("Training the model...")
-    for iter in range(args.max_iters):
+    assert start_iter <= args.max_iters
+    for iter in range(start_iter, args.max_iters):
         timer.tic()
         # get one batch
         img_list, blobs_train = data_layer_train.forward()
@@ -389,11 +394,11 @@ def run_train(args):
 
                     cur_map = (cur_cnn_fg_prob_map*255).astype(int)
                     cur_save_path = os.path.join(res_save_dir, cur_img_name + '_prob_cnn.png')
-                    skimage.io.imsave(cur_save_path, cur_map)
+                    cv2.imwrite(cur_save_path, cur_map)
                     cur_map = (cur_infer_module_fg_prob_map*255).astype(int)
                     # cur_map[cur_map==127] = 0
                     cur_save_path = os.path.join(res_save_dir, cur_img_name + '_prob_infer_module.png')
-                    skimage.io.imsave(cur_save_path, cur_map)
+                    cv2.imwrite(cur_save_path, cur_map)
 
             cnn_auc_test, cnn_ap_test = util.get_auc_ap_score(all_cnn_labels, all_cnn_preds)
             all_cnn_labels_bin = np.copy(all_cnn_labels).astype(np.bool)

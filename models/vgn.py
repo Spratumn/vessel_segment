@@ -55,6 +55,7 @@ class VesselSegmVGN():
 
     def load_model(self, modelpath):
         weight_dict = torch.load(modelpath)
+        full_model = False
         if 'gat' in weight_dict:
             self.cnn_model.load_state_dict(weight_dict['cnn'])
             print('Load CNN model Succeed!')
@@ -62,9 +63,11 @@ class VesselSegmVGN():
             print('Load GNN model Succeed!')
             self.infer_model.load_state_dict(weight_dict['infer'])
             print('Load Infer model Succeed!')
+            full_model = True
         else:
             self.cnn_model.load_state_dict(weight_dict)
             print('Load CNN model Succeed!')
+        return full_model
 
     def load_npy(self, data_path):
         data_dict = np.load(data_path, allow_pickle=True, encoding='latin1').item()
@@ -224,8 +227,8 @@ class VesselSegmVGN():
         # precision, recall
         post_cnn_num_fg_output = torch.sum(post_cnn_flat_bin_output.float())
         post_cnn_tp = torch.sum(torch.logical_and(flat_labels.bool(), post_cnn_flat_bin_output).float())
-        post_cnn_precision = torch.divide(post_cnn_tp,torch.add(post_cnn_num_fg_output, cfg.EPSILON))
-        post_cnn_recall = torch.divide(post_cnn_tp,num_pixel_fg.float())
+        post_cnn_precision = torch.divide(post_cnn_tp, torch.add(post_cnn_num_fg_output, cfg.EPSILON))
+        post_cnn_recall = torch.divide(post_cnn_tp, num_pixel_fg.float())
 
         return {'gnn_prob': gnn_prob, 'loss': loss, 'img_fg_prob': img_fg_prob,
                 'cnn_loss': cnn_loss, 'cnn_accuracy': cnn_accuracy, 'cnn_precision': cnn_precision, 'cnn_recall': cnn_recall,
